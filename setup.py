@@ -15,10 +15,6 @@ dev_require = [
     'Sphinx'
 ]
 
-dependency_links = [
-     'git+https://github.com/johnramsden/pyzfscmds#egg=pyzfscmds'
-]
-
 
 def readme():
     with open('README.rst') as f:
@@ -26,10 +22,9 @@ def readme():
 
 
 setup(
-    name='zedenv',
-    version=__version__,
-    description='Utility to manage Boot Environments using ZFS',
-    long_description=readme(),
+    name='zedenv-grub',
+    version='0.1.0',
+    description='zedenv Plugin for GRUB',
     url='http://github.com/johnramsden/zedenv',
     author='John Ramsden',
     author_email='johnramsden@riseup.net',
@@ -41,21 +36,16 @@ setup(
     ],
     keywords='cli',
     packages=find_packages(exclude=["*tests*", "test_*"]),
-    install_requires=['click', 'pyzfscmds'],
+    install_requires=['click', 'zedenv'],
     setup_requires=['pytest-runner'],
-    dependency_links=dependency_links,
     tests_require=tests_require,
     extras_require={
         'test': tests_require,
         'dev': dev_require,
     },
     entry_points="""
-        [console_scripts]
-        zedenv = zedenv.main:cli
         [zedenv.plugins]
-        grub = zedenv.plugins.grub:GRUB
-        systemdboot = zedenv.plugins.systemdboot:SystemdBoot
-        freebsdloader = zedenv.plugins.freebsdloader:FreeBSDLoader
+        grub = zedenv_grub.grub:GRUB
     """,
     zip_safe=False,
 )
