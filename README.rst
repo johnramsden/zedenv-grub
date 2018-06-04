@@ -7,4 +7,4 @@ zedenv - ZFS boot environment manager - GRUB plugin
 Install
 ---------
 
-Install ``zedenv`` then zedenv-grub
+Install ``zedenv`` then zedenv-grub.

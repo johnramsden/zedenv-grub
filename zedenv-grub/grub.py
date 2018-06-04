@@ -27,21 +27,28 @@ class GRUB(plugin_config.Plugin):
         self.old_entry = f"{self.entry_prefix}-{self.old_boot_environment}"
         self.new_entry = f"{self.entry_prefix}-{self.boot_environment}"
 
-        self.zedenv_properties["grubdir"] = "/etc/grub.d"
-        self.zedenv_properties["grubboot"] = "/boot/grub"
+        self.boot_mountpoint = "/boot"
+        self.env_dir = "env"
 
-        if not os.path.isdir(self.zedenv_properties["grubdir"]):
-            self.plugin_property_error("grubdir")
+        # self.zedenv_properties["grubdir"] = "/etc/grub.d"
+        self.zedenv_properties["boot"] = "/mnt/boot"
+        self.zedenv_properties["bootonpool"] = "no"
 
-        if not os.path.isdir(self.zedenv_properties["grubboot"]):
-            self.plugin_property_error("grubboot")
+        # if not os.path.isdir(self.zedenv_properties["boot"]):
+        #     self.plugin_property_error("grubdir")
+
+        if not os.path.isdir(self.zedenv_properties["boot"]):
+            self.plugin_property_error("boot")
+
+        self.grub_boot_dir = os.path.join(self.zedenv_properties["boot"], "grub")
 
         self.grub_cfg = "grub.cfg"
         self.grub_cfg_path = os.path.join(self.grub_boot_dir, self.grub_cfg)
 
-        self.grub_custom = "40_zedenv_custom"
-        self.grub_custom_path = os.path.join(self.grub_dir, self.grub_custom)
+        # self.grub_custom = "40_zedenv_custom"
+        # self.grub_custom_path = os.path.join(self.zedenv_properties["grubdir"], self.grub_custom)
 
+    '''
     def edit_bootloader_entry(self, temp_dir: str):
 
         temp_grub_custom = os.path.join(temp_dir, self.grub_custom)
@@ -106,6 +113,7 @@ class GRUB(plugin_config.Plugin):
 
                 os.chmod(temp_grub_custom,
                          stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+    '''
 
     def grub_mkconfig(self):
         env = dict(os.environ, ZPOOL_VDEV_NAME_PATH='1')
@@ -125,6 +133,50 @@ class GRUB(plugin_config.Plugin):
 
         return grub_output
 
+    def modify_bootloader(self, temp_boot: str,):
+
+        real_kernel_dir = os.path.join(self.zedenv_properties["boot"], "env")
+        temp_kernel_dir = os.path.join(temp_boot, "env")
+
+        real_old_dataset_kernel = os.path.join(real_kernel_dir, self.old_entry)
+        temp_new_dataset_kernel = os.path.join(temp_kernel_dir, self.new_entry)
+
+        if not os.path.isdir(real_old_dataset_kernel):
+            ZELogger.log({
+                "level": "INFO",
+                "message": (f"No directory for Boot environments kernels found at "
+                            f"'{real_old_dataset_kernel}', creating empty directory."
+                            f"Don't forget to add your kernel to "
+                            f"{real_kernel_dir}/{self.boot_environment}.")
+            })
+            if not self.noop:
+                try:
+                    os.makedirs(temp_new_dataset_kernel)
+                except PermissionError as e:
+                    ZELogger.log({
+                        "level": "EXCEPTION",
+                        "message": f"Require Privileges to write to {temp_new_dataset_kernel}\n{e}"
+                    }, exit_on_error=True)
+                except OSError as os_err:
+                    ZELogger.log({
+                        "level": "EXCEPTION",
+                        "message": os_err
+                    }, exit_on_error=True)
+        else:
+            if not self.noop:
+                try:
+                    shutil.copytree(real_old_dataset_kernel, temp_new_dataset_kernel)
+                except PermissionError as e:
+                    ZELogger.log({
+                        "level": "EXCEPTION",
+                        "message": f"Require Privileges to write to {temp_new_dataset_kernel}\n{e}"
+                    }, exit_on_error=True)
+                except IOError as e:
+                    ZELogger.log({
+                        "level": "EXCEPTION",
+                        "message": f"IOError writing to {temp_new_dataset_kernel}\n{e}"
+                    }, exit_on_error=True)
+
     def post_activate(self):
         ZELogger.verbose_log({
             "level": "INFO",
@@ -139,8 +191,8 @@ class GRUB(plugin_config.Plugin):
                 "message": f"Created {t_grub}.\n"
             }, self.verbose)
 
-            self.edit_bootloader_entry(t_grub)
-            self.recurse_move(t_grub, self.grub_dir, overwrite=True)
+            self.modify_bootloader(t_grub)
+            self.recurse_move(t_grub, self.zedenv_properties["boot"], overwrite=True)
 
         self.grub_mkconfig()
 
@@ -148,4 +200,12 @@ class GRUB(plugin_config.Plugin):
         pass
 
     def mid_activate(self, be_mountpoint: str):
-        pass
+        ZELogger.verbose_log({
+            "level": "INFO",
+            "message": f"Running {self.bootloader} mid activate.\n"
+        }, self.verbose)
+
+        replace_pattern = r'(^{real_boot}/{env}/?)(.*)(\s.*{boot}\s.*$)'.format(
+            real_boot=self.zedenv_properties["boot"], env=self.env_dir, boot=self.boot_mountpoint)
+
+        self.modify_fstab(be_mountpoint, replace_pattern, self.new_entry)
