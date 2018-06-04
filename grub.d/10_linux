@@ -55,17 +55,11 @@ else
 fi
 
 case x"$GRUB_FS" in
-    xbtrfs)
-	rootsubvol="`make_system_path_relative_to_its_root /`"
-	rootsubvol="${rootsubvol#/}"
-	if [ "x${rootsubvol}" != x ]; then
-	    GRUB_CMDLINE_LINUX="rootflags=subvol=${rootsubvol} ${GRUB_CMDLINE_LINUX}"
-	fi;;
     xzfs)
-  rpool=`/home/zdykstra/source/zedenv-generators/bin/zedenv-stub pool`
-  bootfs=`zpool get -Ho value bootfs ${rpool}`
-  bootenv=`basename ${bootfs}`
-	LINUX_ROOT_DEVICE="ZFS=${bootfs}"
+        rpool=$(mount | awk '/ \/ / {print $1}' | awk -F / '{print $1}')
+        bootfs=`zpool get -Ho value bootfs ${rpool}`
+        bootenv=`basename ${bootfs}`
+        LINUX_ROOT_DEVICE="ZFS=${bootfs}"
 	;;
 esac
 
@@ -148,17 +142,25 @@ EOF
 EOF
 }
 
+# Try to get boot location from zfs property. If it unset, set it to '/mnt/boot'
+grub_boot="$(zfs get -H -o value org.zedenv.grub:boot ${bootfs})"
+if [ "x${grub_boot}" == x ] || [ "x${grub_boot}" == "-" ]; then
+    grub_boot="/mnt/boot"
+fi
+
+zedenv_boot_env="${grub_boot}/env/zedenv-${bootenv}"
+
 machine=`uname -m`
 case "x$machine" in
     xi?86 | xx86_64)
 	list=
-	for i in /boot/${bootenv}/vmlinuz-* /boot/${bootenv}/kernel-* ; do
+	for i in ${zedenv_boot_env}/vmlinuz-* ${zedenv_boot_env}/kernel-* ; do
 	    if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
 	done ;;
     *) 
 	list=
-	for i in /boot/${bootenv}/vmlinuz-* /boot/${bootenv}/vmlinux-* /boot/${bootenv}/kernel-* ; do
-                  if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
+	for i in ${zedenv_boot_env}/vmlinuz-* ${zedenv_boot_env}/vmlinux-* ${zedenv_boot_env}/kernel-* ; do
+        if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
 	done ;;
 esac
 
