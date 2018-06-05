@@ -32,7 +32,7 @@ class GRUB(plugin_config.Plugin):
 
         # self.zedenv_properties["grubdir"] = "/etc/grub.d"
         self.zedenv_properties["boot"] = "/mnt/boot"
-        self.zedenv_properties["bootonpool"] = "no"
+        self.zedenv_properties["bootonzfsl"] = "no"
 
         # if not os.path.isdir(self.zedenv_properties["boot"]):
         #     self.plugin_property_error("grubdir")
