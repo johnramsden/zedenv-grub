@@ -194,7 +194,13 @@ class GRUB(plugin_config.Plugin):
             self.modify_bootloader(t_grub)
             self.recurse_move(t_grub, self.zedenv_properties["boot"], overwrite=True)
 
-        self.grub_mkconfig()
+        try:
+            self.grub_mkconfig()
+        except RuntimeError as e:
+            ZELogger.verbose_log({
+                "level": "INFO",
+                "message": f"During 'post activate', 'grub-mkconfig' failed with:\n{e}.\n"
+            }, self.verbose)
 
     def pre_activate(self):
         pass
