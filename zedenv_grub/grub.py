@@ -7,6 +7,9 @@ import subprocess
 
 import click
 
+import pyzfscmds.utility
+
+import zedenv.cli.mount
 import zedenv.lib.be
 import zedenv.plugins.configuration as plugin_config
 import zedenv.lib.system
@@ -29,20 +32,33 @@ class GRUB(plugin_config.Plugin):
 
         self.boot_mountpoint = "/boot"
         self.env_dir = "env"
+        self.zfs_env_dir = "zfsenv"
 
-        # self.zedenv_properties["grubdir"] = "/etc/grub.d"
+        # Property defaults if unset:
         self.zedenv_properties["boot"] = "/mnt/boot"
-        self.zedenv_properties["bootonzfsl"] = "no"
+        self.zedenv_properties["bootonzfs"] = "no"
 
-        # if not os.path.isdir(self.zedenv_properties["boot"]):
-        #     self.plugin_property_error("grubdir")
+        self.check_zedenv_properties()
+
+        if self.zedenv_properties["bootonzfs"] == ("yes" or "1"):
+            self.bootonzfs = True
+        elif self.zedenv_properties["bootonzfs"] == ("no" or "0"):
+            self.bootonzfs = False
+        else:
+            ZELogger.log({
+                "level": "EXCEPTION",
+                "message": (f"Property 'bootonzfs' is set to invalid value "
+                            f"{self.zedenv_properties['bootonzfs']}, should be "
+                            "'yes', 'no', '0', or '1'. Exiting.\n")
+            }, exit_on_error=True)
 
         if not os.path.isdir(self.zedenv_properties["boot"]):
             self.plugin_property_error("boot")
 
-        self.grub_boot_dir = os.path.join(self.zedenv_properties["boot"], "grub")
+        self.grub_boot_dir = os.path.join(self.boot_mountpoint, "grub")
 
         self.grub_cfg = "grub.cfg"
+        # TODO: Should this be in '/mnt/boot', or '/boot'?
         self.grub_cfg_path = os.path.join(self.grub_boot_dir, self.grub_cfg)
 
         # self.grub_custom = "40_zedenv_custom"
@@ -177,6 +193,36 @@ class GRUB(plugin_config.Plugin):
                         "message": f"IOError writing to {temp_new_dataset_kernel}\n{e}"
                     }, exit_on_error=True)
 
+    def setup_boot_env_tree(self):
+        mount_root = os.path.join(self.zedenv_properties["boot"], self.zfs_env_dir)
+
+        if not os.path.exists(mount_root):
+            os.mkdir(mount_root)
+
+        be_list = None
+        be_list = zedenv.lib.be.list_boot_environments(self.be_root, ['name'])
+        ZELogger.verbose_log(
+            {"level": "INFO", "message": f"Going over list {be_list}.\n"}, self.verbose)
+
+        for b in be_list:
+            be_name = pyzfscmds.utility.dataset_child_name(b['name'], False)
+            be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
+            ZELogger.verbose_log(
+                {"level": "INFO", "message": f"Setting up {b['name']}.\n"}, self.verbose)
+
+            if not os.path.exists(be_boot_mount):
+                os.mkdir(be_boot_mount)
+
+            if not os.listdir(be_boot_mount):
+                zedenv.cli.mount.zedenv_mount(be_name,
+                                              be_boot_mount,
+                                              self.verbose, self.be_root)
+            else:
+                ZELogger.verbose_log({
+                    "level": "WARNING",
+                    "message": f"Mount directory {be_boot_mount} wasn't empty, skipping.\n"
+                }, self.verbose)
+
     def post_activate(self):
         ZELogger.verbose_log({
             "level": "INFO",
@@ -192,15 +238,18 @@ class GRUB(plugin_config.Plugin):
             }, self.verbose)
 
             self.modify_bootloader(t_grub)
-            self.recurse_move(t_grub, self.zedenv_properties["boot"], overwrite=True)
+            self.recurse_move(t_grub, self.zedenv_properties["boot"], overwrite=False)
 
-        try:
-            self.grub_mkconfig()
-        except RuntimeError as e:
-            ZELogger.verbose_log({
-                "level": "INFO",
-                "message": f"During 'post activate', 'grub-mkconfig' failed with:\n{e}.\n"
-            }, self.verbose)
+        if self.bootonzfs:
+            self.setup_boot_env_tree()
+
+        # try:
+        #     self.grub_mkconfig()
+        # except RuntimeError as e:
+        #     ZELogger.verbose_log({
+        #         "level": "INFO",
+        #         "message": f"During 'post activate', 'grub-mkconfig' failed with:\n{e}.\n"
+        #     }, self.verbose)
 
     def pre_activate(self):
         pass
