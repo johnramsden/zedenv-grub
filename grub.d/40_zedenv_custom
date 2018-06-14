@@ -61,6 +61,8 @@ case x"$GRUB_FS" in
         bootfs=`zpool get -Ho value bootfs ${rpool}`
         bootenv=`basename ${bootfs}`
         LINUX_ROOT_DEVICE="ZFS=${bootfs}"
+        be_root=$(dirname "${bootfs}")
+        be_datasets=$(zfs list -H -o name -d 1 -r "${be_root}" | tail -n +2)
 	;;
 esac
 
@@ -148,7 +150,7 @@ grub_boot="$(zfs get -H -o value 'org.zedenv.grub:boot' ${bootfs})"
 if [ "x${grub_boot}" = "x" ] || [ "x${grub_boot}" = "x-" ]; then
     grub_boot="/mnt/boot"
 fi
-zedenv_boot_env_kernels="${grub_boot}/env/zedenv-${bootenv}"
+zedenv_boot_env_kernels="${grub_boot}/env"
 
 # Check if boot will be stored on ZFS
 grub_boot_on_zfs="$(zfs get -H -o value 'org.zedenv.grub:bootonzfs' ${bootfs})"
@@ -172,8 +174,10 @@ case "x$machine" in
       done
     done
   else
-    for i in ${zedenv_boot_env_kernels}/vmlinuz-* ${zedenv_boot_env_kernels}/kernel-* ; do
-      if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
+    for zfs_boot in "${zedenv_boot_env_kernels}/zedenv-"*; do
+      for i in ${zfs_boot}/vmlinuz-* ${zfs_boot}/kernel-* ; do
+        if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
+      done
     done
   fi ;;
     *) 
@@ -186,8 +190,10 @@ case "x$machine" in
       done
     done
   else
-    for i in ${zedenv_boot_env_kernels}/vmlinuz-* ${zedenv_boot_env_kernels}/vmlinux-* ${zedenv_boot_env_kernels}/kernel-* ; do
-        if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
+    for zfs_boot in "${zedenv_boot_env_kernels}/zedenv-"*; do
+      for i in ${zfs_boot}/vmlinuz-* ${zfs_boot}/vmlinux-* ${zfs_boot}/kernel-* ; do
+          if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
+      done
     done
   fi ;;
 esac
