@@ -2,6 +2,7 @@
 
 import os
 import platform
+import re
 import subprocess
 
 from typing import List
@@ -18,9 +19,13 @@ def source(file: str):
 
     env_command = ['sh', '-c', f'set -a && . {file} && env']
 
-    env_output = subprocess.Popen(env_command, stdout=subprocess.PIPE)
+    try:
+        env_output = subprocess.check_output(
+            env_command, universal_newlines=True, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to gsource{file}.\n{e}\n.")
 
-    for line in env_output.stdout:
+    for line in env_output.splitlines():
         (key, _, value) = line.partition("=")
         os.environ[key] = value
 
@@ -54,7 +59,7 @@ class Generator:
         self.text_domain_dir = f"{self.data_root_dir}/locale"
 
         # Update environment variables by sourcing grub defaults
-        source("/etc/defaults/grub")
+        source("/etc/default/grub")
 
         grub_class = "--class gnu-linux --class gnu --class os"
 
@@ -83,6 +88,11 @@ class Generator:
         self.invalid_filenames = ["readme"]  # Normalized to lowercase
         self.invalid_extensions = [".dpkg", ".rpmsave", ".rpmnew", ".pacsave", ".pacnew"]
 
+        self.boot_list = self.get_boot_list()
+
+        self.genkernel_arch = self.get_genkernel_arch()
+
+
     def file_valid(self, file_path):
         """
         Run equivalent checks to grub_file_is_not_garbage() from grub-mkconfig_lib
@@ -105,7 +115,7 @@ class Generator:
 
         return True
 
-    def get_boot_list(self):
+    def get_boot_list(self, boot_path: str = "/boot"):
         """
         Check if grub list item shows up
 
@@ -122,16 +132,46 @@ class Generator:
                           if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
             done ;;
         esac
-
-        case "$machine" in
-            i?86) GENKERNEL_ARCH="x86" ;;
-            mips|mips64) GENKERNEL_ARCH="mips" ;;
-            mipsel|mips64el) GENKERNEL_ARCH="mipsel" ;;
-            arm*) GENKERNEL_ARCH="arm" ;;
-            *) GENKERNEL_ARCH="$machine" ;;
-        esac
         """
-        pass
+
+        boot_list = []
+
+        vmlinuz = r'(/vmlinuz-.*)'
+        vmlinux = r'(/vmlinux-.*)'
+        kernel = r'(/kernel-.*)'
+
+        boot_entries = [os.path.join(boot_path, e) for e in os.listdir(boot_path)]
+        boot_entries.extend([os.path.join(boot_path, e) for e in os.listdir("/")])
+
+        boot_search = f"{boot_path}{vmlinuz}|{boot_path}{kernel}|{vmlinuz}"
+
+        if re.search(r'(i[36]86)|x86_64', self.machine):
+            boot_regex = re.compile(boot_search)
+        else:
+            boot_search = f"{boot_search}|{boot_path}{vmlinux}|{vmlinux}"
+            boot_regex = re.compile(boot_search)
+
+        for i in boot_entries:
+            if boot_regex.search(i) and self.file_valid(i):
+                boot_list.append(i)
+
+        return boot_list
+
+    def get_genkernel_arch(self):
+
+        if re.search(r'i[36]86', self.machine):
+            return "x86"
+
+        if re.search(r'mips|mips64', self.machine):
+            return "mips"
+
+        if re.search(r'mipsel|mips64el', self.machine):
+            return "mipsel"
+
+        if re.search(r'arm.*', self.machine):
+            return "arm"
+
+        return self.machine
 
     def grub_command(self, command: str, call_args: List[str] = None):
 
@@ -147,5 +187,6 @@ class Generator:
 
         return cmd_output.splitlines()
 
-
-grub = Generator()
+# grub = Generator()
+# print(grub.boot_list)
+# print(grub.genkernel_arch)
