@@ -4,6 +4,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 
 from typing import List
 
@@ -42,6 +43,59 @@ def normalize_string(str_input: str):
     return "_".join(str_list)
 
 
+def grub_command(command: str, call_args: List[str] = None):
+
+    cmd_call = [command]
+    if call_args:
+        cmd_call.extend(call_args)
+
+    try:
+        cmd_output = subprocess.check_output(
+            cmd_call, universal_newlines=True, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Failed to run {command}.\n{e}\n.")
+
+    return cmd_output.splitlines()
+
+
+class GrubLinuxEntry:
+
+    def __init__(self, linux, be_root, rpool):
+        self.linux = linux
+        self.basename = os.path.basename(linux)
+        self.dirname = os.path.dirname(linux)
+        try:
+            self.rel_dirname = grub_command("grub-mkrelpath", [self.dirname])
+        except RuntimeError as e:
+            sys.exit(e)
+        self.version = self.get_linux_version()
+
+        self.rpool = rpool
+        self.be_root = be_root
+        self.boot_environment = self.get_boot_environment()
+
+        self.linux_root_dataset = os.path.join(
+            f"{self.rpool}{self.be_root}", self.boot_environment)
+        self.linux_root_device = f"ZFS={self.linux_root_dataset}"
+
+    def get_boot_environment(self):
+        target = re.search(r'zedenv-(.*)/*$', self.dirname)
+        if target:
+            return target.group(1)
+        return None
+
+    def get_linux_version(self):
+        """
+        Gets the version after kernel, if there is one
+        Example:
+             vmlinuz-4.16.12_1 gives vmlinuz
+        """
+        target = re.search(r'^[^0-9]*-(.*)', self.basename)
+        if target:
+            return target.group(1)
+        return ""
+
+
 class Generator:
 
     def __init__(self):
@@ -77,10 +131,12 @@ class Generator:
             if os.environ['GRUB_DISABLE_LINUX_PARTUUID'] == ("false" or "False" or "0"):
                 self.grub_disable_linux_partuuid = False
 
-        self.root_dataset = zedenv.lib.be.root()
+        self.root_dataset = pyzfscmds.system.agnostic.mountpoint_dataset("/")
+        self.be_root = zedenv.lib.be.root()
+
         # in GRUB terms, bootfs is everything after pool
         self.bootfs = "/" + self.root_dataset.split("/", 1)[1]
-        self.rpool = pyzfscmds.system.agnostic.mountpoint_dataset("/").split("/")[0]
+        self.rpool = self.root_dataset.split("/")[0]
         self.linux_root_device=f"ZFS={self.rpool}{self.bootfs}"
 
         self.machine = platform.machine()
@@ -92,6 +148,7 @@ class Generator:
 
         self.genkernel_arch = self.get_genkernel_arch()
 
+        self.linux_entries = []
 
     def file_valid(self, file_path):
         """
@@ -173,20 +230,11 @@ class Generator:
 
         return self.machine
 
-    def grub_command(self, command: str, call_args: List[str] = None):
+    def generate_grub_entries(self):
+        for i in self.boot_list:
+            self.linux_entries.append(GrubLinuxEntry(i, self.be_root, self.rpool))
 
-        cmd_call = [command]
-        if call_args:
-            cmd_call.extend(call_args)
 
-        try:
-            cmd_output = subprocess.check_output(
-                cmd_call, universal_newlines=True, stderr=subprocess.PIPE)
-        except subprocess.CalledProcessError as e:
-            raise RuntimeError(f"Failed to run {command}.\n{e}\n.")
-
-        return cmd_output.splitlines()
-
-# grub = Generator()
-# print(grub.boot_list)
+#grub = Generator()
+#print(grub.boot_list)
 # print(grub.genkernel_arch)
