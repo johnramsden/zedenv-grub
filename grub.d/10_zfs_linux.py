@@ -1,16 +1,16 @@
 #!/usr/bin/env python3.6
 
+import sys
 import os
 import platform
 import re
 import subprocess
-import sys
 
-from typing import List
-
-import pyzfscmds.utility
-import pyzfscmds.system.agnostic
 import zedenv.lib.be
+import pyzfscmds.system.agnostic
+import pyzfscmds.utility
+
+from typing import List, Optional
 
 
 def source(file: str):
@@ -60,8 +60,9 @@ def grub_command(command: str, call_args: List[str] = None):
 
 class GrubLinuxEntry:
 
-    def __init__(self, linux, be_root, rpool):
+    def __init__(self, linux, be_root, rpool, genkernel_arch):
         self.linux = linux
+        self.genkernel_arch = genkernel_arch
         self.basename = os.path.basename(linux)
         self.dirname = os.path.dirname(linux)
         try:
@@ -78,7 +79,62 @@ class GrubLinuxEntry:
             f"{self.rpool}{self.be_root}", self.boot_environment)
         self.linux_root_device = f"ZFS={self.linux_root_dataset}"
 
+        self.initrd_early = self.get_initrd_early()
+        self.initrd_real = self.get_initrd_real()
+        self.initrd = self.get_initrd()
+
+        self.kernel_config = self.get_kernel_config()
+
+    def get_kernel_config(self) -> Optional[str]:
+        configs = [f"{self.dirname}/config-{self.version}",
+                   f"/etc/kernels/kernel-config-{self.version}"]
+        return next((c for c in configs if os.path.isfile(c)), None)
+
+    def get_initrd(self) -> list:
+        initrd = []
+        if self.initrd_real:
+            initrd.append(self.initrd_real)
+
+        if self.initrd_early:
+            initrd.extend(self.initrd_early)
+
+        return initrd
+
+    def get_initrd_early(self) -> list:
+        """
+        Get microcode images
+        https://www.mail-archive.com/grub-devel@gnu.org/msg26775.html
+        See grub-mkconfig for code
+        GRUB_EARLY_INITRD_LINUX_STOCK is distro provided microcode, ie:
+          intel-uc.img intel-ucode.img amd-uc.img amd-ucode.img
+          early_ucode.cpio microcode.cpio"
+        GRUB_EARLY_INITRD_LINUX_CUSTOM is for your custom created images
+        """
+        early_initrd = []
+        if "GRUB_EARLY_INITRD_LINUX_STOCK" in os.environ:
+            early_initrd.extend(os.environ['GRUB_EARLY_INITRD_LINUX_STOCK'].split())
+
+        if "GRUB_EARLY_INITRD_LINUX_CUSTOM" in os.environ:
+            early_initrd.extend(os.environ['GRUB_EARLY_INITRD_LINUX_CUSTOM'].split())
+
+        return [i for i in early_initrd if os.path.isfile(os.path.join(self.dirname, i))]
+
+    def get_initrd_real(self) -> Optional[str]:
+        initrd_list = [f"initrd.img-{self.version}",
+                       f"initrd-{self.version}.img",
+                       f"initrd-{self.version}.gz",
+                       f"initrd-{self.version}",
+                       f"initramfs-{self.version}.img",
+                       f"initramfs-genkernel-{self.version}"
+                       f"initramfs-genkernel-{self.genkernel_arch}-{self.version}"]
+
+        return next(
+            (i for i in initrd_list if os.path.isfile(os.path.join(self.dirname, i))), None)
+
     def get_boot_environment(self):
+        """
+        Get name of BE from kernel directory
+        """
         target = re.search(r'zedenv-(.*)/*$', self.dirname)
         if target:
             return target.group(1)
