@@ -60,7 +60,13 @@ def grub_command(command: str, call_args: List[str] = None):
 
 class GrubLinuxEntry:
 
-    def __init__(self, linux, be_root, rpool, genkernel_arch):
+    def __init__(self, linux: str,
+                 be_root: str,
+                 rpool: str,
+                 genkernel_arch: str,
+                 boot_environment_kernels: dict,
+                 simple: bool = True):
+
         self.linux = linux
         self.genkernel_arch = genkernel_arch
         self.basename = os.path.basename(linux)
@@ -75,6 +81,7 @@ class GrubLinuxEntry:
         self.be_root = be_root
         self.boot_environment = self.get_boot_environment()
 
+        # Root dataset will double as device ID
         self.linux_root_dataset = os.path.join(
             f"{self.rpool}{self.be_root}", self.boot_environment)
         self.linux_root_device = f"ZFS={self.linux_root_dataset}"
@@ -84,6 +91,29 @@ class GrubLinuxEntry:
         self.initrd = self.get_initrd()
 
         self.kernel_config = self.get_kernel_config()
+
+        self.initramfs = self.get_initramfs()
+
+    def linux_entry(self, os, version, type, args) -> Optional[List[str]]:
+        """
+        Generate a linux entry
+        """
+        pass
+
+    def get_initramfs(self) -> Optional[str]:
+        """
+        Check kernel_config for initramfs setting
+        """
+        initramfs = None
+        if self.kernel_config:
+            reg = re.compile(r'CONFIG_INITRAMFS_SOURCE=(.*)$')
+
+            with open(self.kernel_config) as f:
+                config = f.read().splitlines()
+
+            initramfs = next((reg.match(l).group(1) for l in config if reg.match(l)), None)
+
+        return initramfs
 
     def get_kernel_config(self) -> Optional[str]:
         configs = [f"{self.dirname}/config-{self.version}",
@@ -181,7 +211,7 @@ class Generator:
             self.grub_os = "GNU/Linux"
             self.grub_class = grub_class
 
-        # Default to true in order to maintian compatibility with older kernels.
+        # Default to true in order to maintain compatibility with older kernels.
         self.grub_disable_linux_partuuid = True
         if "GRUB_DISABLE_LINUX_PARTUUID" in os.environ:
             if os.environ['GRUB_DISABLE_LINUX_PARTUUID'] == ("false" or "False" or "0"):
@@ -193,18 +223,31 @@ class Generator:
         # in GRUB terms, bootfs is everything after pool
         self.bootfs = "/" + self.root_dataset.split("/", 1)[1]
         self.rpool = self.root_dataset.split("/")[0]
-        self.linux_root_device=f"ZFS={self.rpool}{self.bootfs}"
+        self.linux_root_device = f"ZFS={self.rpool}{self.bootfs}"
 
         self.machine = platform.machine()
 
         self.invalid_filenames = ["readme"]  # Normalized to lowercase
         self.invalid_extensions = [".dpkg", ".rpmsave", ".rpmnew", ".pacsave", ".pacnew"]
 
-        self.boot_list = self.get_boot_list()
+        self.boot_list = self.get_boot_environments_boot_list()
 
         self.genkernel_arch = self.get_genkernel_arch()
 
         self.linux_entries = []
+
+        self.grub_boot = zedenv.lib.be.get_property(self.root_dataset,'org.zedenv.grub:boot')
+        if not self.grub_boot or self.grub_boot == "-":
+            self.grub_boot = "/mnt/boot"
+
+        grub_boot_on_zfs = zedenv.lib.be.get_property(
+                                                self.root_dataset,'org.zedenv.grub:bootonzfs')
+        if grub_boot_on_zfs.lower() == ("1" or "yes"):
+            self.grub_boot_on_zfs = True
+            self.boot_env_kernels = os.path.join(self.grub_boot, "zfsenv")
+        else:
+            self.grub_boot_on_zfs = False
+            self.boot_env_kernels = os.path.join(self.grub_boot, "env")
 
     def file_valid(self, file_path):
         """
@@ -228,7 +271,40 @@ class Generator:
 
         return True
 
-    def get_boot_list(self, boot_path: str = "/boot"):
+    def get_boot_environments_boot_list(self) -> List[Optional[dict]]:
+        """
+        Get a list of dicts containing all BE kernels
+        :return:
+        """
+
+        vmlinuz = r'(vmlinuz-.*)'
+        vmlinux = r'(vmlinux-.*)'
+        kernel = r'(kernel-.*)'
+
+        boot_search = f"{vmlinuz}|{kernel}"
+
+        if re.search(r'(i[36]86)|x86_64', self.machine):
+            boot_regex = re.compile(boot_search)
+        else:
+            boot_search = f"{boot_search}|{vmlinux}"
+            boot_regex = re.compile(boot_search)
+
+        boot_entries = []
+        for e in os.listdir(self.boot_env_kernels):
+            boot_dir = os.path.join(self.boot_env_kernels, e)
+
+            boot_files = os.listdir(boot_dir)
+            kernel_matches = [i for i in boot_files if boot_regex.match(i) and self.file_valid(i)]
+
+            boot_entries.append({
+                "directory": boot_dir,
+                "files": boot_files,
+                "kernels": kernel_matches
+            })
+
+        return boot_entries
+
+    def get_regular_grub_boot_list(self, boot_path: str = "/boot"):
         """
         Check if grub list item shows up
 
@@ -288,7 +364,9 @@ class Generator:
 
     def generate_grub_entries(self):
         for i in self.boot_list:
-            self.linux_entries.append(GrubLinuxEntry(i, self.be_root, self.rpool))
+            for e in i['kernels']:
+                self.linux_entries.append(
+                    GrubLinuxEntry(e, self.be_root, self.rpool, self.genkernel_arch, i))
 
 
 #grub = Generator()
