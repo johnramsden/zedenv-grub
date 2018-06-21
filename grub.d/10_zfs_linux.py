@@ -1,15 +1,14 @@
 #!/usr/bin/env python3.6
 
 import sys
+
 import os
 import platform
-import re
-import subprocess
-
-import zedenv.lib.be
 import pyzfscmds.system.agnostic
 import pyzfscmds.utility
-
+import re
+import subprocess
+import zedenv.lib.be
 from typing import List, Optional
 
 
@@ -44,7 +43,6 @@ def normalize_string(str_input: str):
 
 
 def grub_command(command: str, call_args: List[str] = None):
-
     cmd_call = [command]
     if call_args:
         cmd_call.extend(call_args)
@@ -61,18 +59,28 @@ def grub_command(command: str, call_args: List[str] = None):
 class GrubLinuxEntry:
 
     def __init__(self, linux: str,
+                 grub_os: str,
                  be_root: str,
                  rpool: str,
                  genkernel_arch: str,
                  boot_environment_kernels: dict,
-                 simple: bool = True):
+                 grub_cmdline_linux: str,
+                 grub_cmdline_linux_default: str):
+
+        self.grub_cmdline_linux = grub_cmdline_linux
+        self.grub_cmdline_linux_default = grub_cmdline_linux_default
 
         self.linux = linux
+        self.grub_os = grub_os
         self.genkernel_arch = genkernel_arch
+
         self.basename = os.path.basename(linux)
         self.dirname = os.path.dirname(linux)
+
+        self.boot_environment_kernels = boot_environment_kernels
+
         try:
-            self.rel_dirname = grub_command("grub-mkrelpath", [self.dirname])
+            self.rel_dirname = grub_command("grub-mkrelpath", [self.dirname])[0]
         except RuntimeError as e:
             sys.exit(e)
         self.version = self.get_linux_version()
@@ -83,37 +91,108 @@ class GrubLinuxEntry:
 
         # Root dataset will double as device ID
         self.linux_root_dataset = os.path.join(
-            f"{self.rpool}{self.be_root}", self.boot_environment)
+            f"{self.be_root}", self.boot_environment)
         self.linux_root_device = f"ZFS={self.linux_root_dataset}"
+        self.boot_device_id = self.linux_root_dataset
 
         self.initrd_early = self.get_initrd_early()
         self.initrd_real = self.get_initrd_real()
-        self.initrd = self.get_initrd()
 
         self.kernel_config = self.get_kernel_config()
 
-        self.initramfs = self.get_initramfs()
+        self.initramfs = self.get_from_config(r'CONFIG_INITRAMFS_SOURCE=(.*)$')
 
-    def linux_entry(self, os, version, type, args) -> Optional[List[str]]:
-        """
-        Generate a linux entry
-        """
-        pass
+        self.grub_default_entry = None
+        if "GRUB_ACTUAL_DEFAULT" in os.environ:
+            self.grub_default_entry = os.environ['GRUB_ACTUAL_DEFAULT']
 
-    def get_initramfs(self) -> Optional[str]:
+        self.grub_save_default = None
+        if "GRUB_SAVEDEFAULT" in os.environ:
+            self.grub_save_default = True if os.environ['GRUB_SAVEDEFAULT'] == "true" else False
+
+        self.grub_gfxpayload_linux = None
+        if "GRUB_GFXPAYLOAD_LINUX" in os.environ:
+            self.grub_gfxpayload_linux = os.environ['GRUB_GFXPAYLOAD_LINUX']
+
+        self.grub_entries = []
+
+    @staticmethod
+    def entry_line(entry_line: str, submenu_indent: int = 0):
+        return ("\t" * submenu_indent) + entry_line
+
+    def generate_entry(self, grub_class, grub_args, entry_type,
+                       entry_indentation: int = 0) -> List[str]:
+
+        entry = []
+
+        if entry_type != "simple":
+            if entry_type == "recovery":
+                title = f"{self.grub_os} with Linux {self.version} (recovery mode)"
+            else:
+                title = f"{self.grub_os} with Linux {self.version}"
+
+            # TODO: If matches default...
+
+            entry.append(
+                self.entry_line(
+                    f"menuentry '{title}' {grub_class} $menuentry_id_option "
+                    f"'gnulinux-{self.version}-{entry_type}-{self.boot_device_id}' {{",
+                    submenu_indent=entry_indentation))
+        else:
+            entry.append(self.entry_line(
+                f"menuentry '{self.grub_os}' {grub_class} $menuentry_id_option "
+                f"'gnulinux-simple-{self.boot_device_id}' {{", submenu_indent=entry_indentation))
+
+        # Graphics section
+        entry.append(self.entry_line("load_video", submenu_indent=entry_indentation + 1))
+        if not self.grub_gfxpayload_linux:
+            fb_efi = self.get_from_config(r'(CONFIG_FB_EFI=y)')
+            vt_hw_console_binding = self.get_from_config(r'(CONFIG_VT_HW_CONSOLE_BINDING=y)')
+
+            if fb_efi and vt_hw_console_binding:
+                entry.append(
+                    self.entry_line('set gfxpayload=keep', submenu_indent=entry_indentation + 1))
+        else:
+            entry.append(self.entry_line(f"set gfxpayload={self.grub_gfxpayload_linux}",
+                                         submenu_indent=entry_indentation + 1))
+
+            entry.append(self.entry_line(f"insmod gzio", submenu_indent=entry_indentation + 1))
+
+        # TODO: prepare_grub_to_access_device section
+
+        entry.append(self.entry_line(f"echo 'Loading Linux {self.version} ...'",
+                                     submenu_indent=entry_indentation + 1))
+        rel_linux = os.path.join(self.rel_dirname, self.basename)
+        entry.append(
+            self.entry_line(f"linux {rel_linux} root={self.linux_root_device} ro {grub_args}",
+                            submenu_indent=entry_indentation + 1))
+
+        initrd = self.get_initrd()
+
+        if initrd:
+            entry.append(self.entry_line(f"echo 'Loading initial ramdisk ...'",
+                                         submenu_indent=entry_indentation + 1))
+            entry.append(self.entry_line(f"initrd {' '.join(initrd)}",
+                                         submenu_indent=entry_indentation + 1))
+
+        entry.append(self.entry_line("}", entry_indentation))
+
+        return entry
+
+    def get_from_config(self, pattern) -> Optional[str]:
         """
         Check kernel_config for initramfs setting
         """
-        initramfs = None
+        config_match = None
         if self.kernel_config:
-            reg = re.compile(r'CONFIG_INITRAMFS_SOURCE=(.*)$')
+            reg = re.compile(pattern)
 
             with open(self.kernel_config) as f:
                 config = f.read().splitlines()
 
-            initramfs = next((reg.match(l).group(1) for l in config if reg.match(l)), None)
+            config_match = next((reg.match(l).group(1) for l in config if reg.match(l)), None)
 
-        return initramfs
+        return config_match
 
     def get_kernel_config(self) -> Optional[str]:
         configs = [f"{self.dirname}/config-{self.version}",
@@ -123,10 +202,10 @@ class GrubLinuxEntry:
     def get_initrd(self) -> list:
         initrd = []
         if self.initrd_real:
-            initrd.append(self.initrd_real)
+            initrd.append(os.path.join(self.rel_dirname, self.initrd_real))
 
         if self.initrd_early:
-            initrd.extend(self.initrd_early)
+            initrd.extend([os.path.join(self.rel_dirname, ie) for ie in self.initrd_early])
 
         return initrd
 
@@ -158,8 +237,13 @@ class GrubLinuxEntry:
                        f"initramfs-genkernel-{self.version}"
                        f"initramfs-genkernel-{self.genkernel_arch}-{self.version}"]
 
-        return next(
+        initrd_real = next(
             (i for i in initrd_list if os.path.isfile(os.path.join(self.dirname, i))), None)
+
+        # if initrd_real:
+        #     return initrd_real[0]
+
+        return initrd_real
 
     def get_boot_environment(self):
         """
@@ -174,9 +258,10 @@ class GrubLinuxEntry:
         """
         Gets the version after kernel, if there is one
         Example:
-             vmlinuz-4.16.12_1 gives vmlinuz
+             vmlinuz-4.16.12_1 gives 4.16.12_1
         """
-        target = re.search(r'^[^0-9]*-(.*)', self.basename)
+
+        target = re.search(r'^[^0-9\-]*-(.*)$', self.basename)
         if target:
             return target.group(1)
         return ""
@@ -198,6 +283,8 @@ class Generator:
         self.text_domain = "grub"
         self.text_domain_dir = f"{self.data_root_dir}/locale"
 
+        self.entry_type = "advanced"
+
         # Update environment variables by sourcing grub defaults
         source("/etc/default/grub")
 
@@ -217,6 +304,28 @@ class Generator:
             if os.environ['GRUB_DISABLE_LINUX_PARTUUID'] == ("false" or "False" or "0"):
                 self.grub_disable_linux_partuuid = False
 
+        if "GRUB_CMDLINE_LINUX" in os.environ:
+            self.grub_cmdline_linux = os.environ['GRUB_CMDLINE_LINUX']
+        else:
+            self.grub_cmdline_linux = ""
+
+        if "GRUB_CMDLINE_LINUX_DEFAULT" in os.environ:
+            self.grub_cmdline_linux_default = os.environ['GRUB_CMDLINE_LINUX_DEFAULT']
+        else:
+            self.grub_cmdline_linux_default = ""
+
+        if "GRUB_DISABLE_SUBMENU" in os.environ and os.environ['GRUB_DISABLE_SUBMENU'] == "y":
+            self.grub_disable_submenu = True
+        else:
+            self.grub_disable_submenu = False
+
+        self.grub_disable_recovery = None
+        if "GRUB_DISABLE_RECOVERY" in os.environ:
+            if os.environ['GRUB_DISABLE_RECOVERY'] == "true":
+                self.grub_disable_recovery = True
+            else:
+                self.grub_disable_recovery = False
+
         self.root_dataset = pyzfscmds.system.agnostic.mountpoint_dataset("/")
         self.be_root = zedenv.lib.be.root()
 
@@ -230,24 +339,24 @@ class Generator:
         self.invalid_filenames = ["readme"]  # Normalized to lowercase
         self.invalid_extensions = [".dpkg", ".rpmsave", ".rpmnew", ".pacsave", ".pacnew"]
 
-        self.boot_list = self.get_boot_environments_boot_list()
-
         self.genkernel_arch = self.get_genkernel_arch()
 
         self.linux_entries = []
 
-        self.grub_boot = zedenv.lib.be.get_property(self.root_dataset,'org.zedenv.grub:boot')
+        self.grub_boot = zedenv.lib.be.get_property(self.root_dataset, 'org.zedenv.grub:boot')
         if not self.grub_boot or self.grub_boot == "-":
             self.grub_boot = "/mnt/boot"
 
         grub_boot_on_zfs = zedenv.lib.be.get_property(
-                                                self.root_dataset,'org.zedenv.grub:bootonzfs')
+            self.root_dataset, 'org.zedenv.grub:bootonzfs')
         if grub_boot_on_zfs.lower() == ("1" or "yes"):
             self.grub_boot_on_zfs = True
             self.boot_env_kernels = os.path.join(self.grub_boot, "zfsenv")
         else:
             self.grub_boot_on_zfs = False
             self.boot_env_kernels = os.path.join(self.grub_boot, "env")
+
+        self.boot_list = self.get_boot_environments_boot_list()
 
     def file_valid(self, file_path):
         """
@@ -294,7 +403,9 @@ class Generator:
             boot_dir = os.path.join(self.boot_env_kernels, e)
 
             boot_files = os.listdir(boot_dir)
-            kernel_matches = [i for i in boot_files if boot_regex.match(i) and self.file_valid(i)]
+            kernel_matches = [i for i in boot_files
+                              if boot_regex.match(i) and self.file_valid(
+                                                                os.path.join(boot_dir, i))]
 
             boot_entries.append({
                 "directory": boot_dir,
@@ -362,13 +473,59 @@ class Generator:
 
         return self.machine
 
+    # grub_class, grub_args,
+    # entry_indentation: int = 0) -> List[str]:
     def generate_grub_entries(self):
+        indent = 0
+        is_top_level = True
+
+        entries = []
+
         for i in self.boot_list:
-            for e in i['kernels']:
-                self.linux_entries.append(
-                    GrubLinuxEntry(e, self.be_root, self.rpool, self.genkernel_arch, i))
+            for j in i['kernels']:
+                grub_entry = GrubLinuxEntry(
+                    os.path.join(i['directory'], j), self.grub_os, self.be_root, self.rpool,
+                    self.genkernel_arch, i, self.grub_cmdline_linux,
+                    self.grub_cmdline_linux_default)
+                self.linux_entries.append(grub_entry)
+
+                if is_top_level and not self.grub_disable_submenu:
+                    # Simple entry
+                    entries.append(
+                        grub_entry.generate_entry(
+                            self.grub_class,
+                            f"{self.grub_cmdline_linux} {self.grub_cmdline_linux_default}",
+                            "simple", entry_indentation=indent))
+
+                    # Submenu title
+                    entries.append(
+                        [(f"submenu 'Advanced options for {self.grub_os}' $menuentry_id_option "
+                          f"'gnulinux-advanced-{grub_entry.boot_device_id}' {{")])
+                    is_top_level = False
+                    indent = 1
+
+                # Advanced entry
+                entries.append(
+                    grub_entry.generate_entry(
+                        self.grub_class,
+                        f"{self.grub_cmdline_linux} {self.grub_cmdline_linux_default}",
+                        "advanced", entry_indentation=indent))
+
+                # Recovery entry
+                if self.grub_disable_recovery:
+                    entries.append(
+                        grub_entry.generate_entry(
+                            self.grub_class,
+                            f"single {self.grub_cmdline_linux}",
+                            "recovery", entry_indentation=indent))
+
+                if not is_top_level:
+                    entries.append("}")
+
+        return entries
 
 
-#grub = Generator()
-#print(grub.boot_list)
-# print(grub.genkernel_arch)
+grub = Generator()
+for en in grub.generate_grub_entries():
+    for l in en:
+        print(l)
