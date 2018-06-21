@@ -519,8 +519,8 @@ class Generator:
                             f"single {self.grub_cmdline_linux}",
                             "recovery", entry_indentation=indent))
 
-                if not is_top_level:
-                    entries.append("}")
+        if not is_top_level:
+            entries.append("}")
 
         return entries
 
