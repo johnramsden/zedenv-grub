@@ -23,7 +23,7 @@ def source(file: str):
         env_output = subprocess.check_output(
             env_command, universal_newlines=True, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to gsource{file}.\n{e}\n.")
+        raise RuntimeError(f"Failed to source{file}.\n{e}\n.")
 
     for line in env_output.splitlines():
         (key, _, value) = line.partition("=")
@@ -42,14 +42,14 @@ def normalize_string(str_input: str):
     return "_".join(str_list)
 
 
-def grub_command(command: str, call_args: List[str] = None):
+def grub_command(command: str, call_args: List[str] = None, stderr=subprocess.PIPE):
     cmd_call = [command]
     if call_args:
         cmd_call.extend(call_args)
 
     try:
         cmd_output = subprocess.check_output(
-            cmd_call, universal_newlines=True, stderr=subprocess.PIPE)
+            cmd_call, universal_newlines=True, stderr=stderr)
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Failed to run {command}.\n{e}\n.")
 
@@ -65,10 +65,13 @@ class GrubLinuxEntry:
                  genkernel_arch: str,
                  boot_environment_kernels: dict,
                  grub_cmdline_linux: str,
-                 grub_cmdline_linux_default: str):
+                 grub_cmdline_linux_default: str,
+                 grub_devices: Optional[List[str]],
+                 default: str):
 
         self.grub_cmdline_linux = grub_cmdline_linux
         self.grub_cmdline_linux_default = grub_cmdline_linux_default
+        self.grub_devices = grub_devices
 
         self.linux = linux
         self.grub_os = grub_os
@@ -114,11 +117,145 @@ class GrubLinuxEntry:
         if "GRUB_GFXPAYLOAD_LINUX" in os.environ:
             self.grub_gfxpayload_linux = os.environ['GRUB_GFXPAYLOAD_LINUX']
 
+        self.grub_enable_cryptodisk = None
+        if "GRUB_ENABLE_CRYPTODISK" in os.environ:
+            if os.environ['GRUB_ENABLE_CRYPTODISK'] == 'y':
+                self.grub_enable_cryptodisk = True
+            else:
+                self.grub_enable_cryptodisk = False
+
+        self.default = default
+
         self.grub_entries = []
 
     @staticmethod
     def entry_line(entry_line: str, submenu_indent: int = 0):
         return ("\t" * submenu_indent) + entry_line
+
+    def prepare_grub_to_access_device(self) -> Optional[List[str]]:
+        """
+        Get device modules to load, replicates function from grub-mkconfig_lib
+        """
+        lines = []
+
+        # Below not needed since not running on net/open{bsd}
+        """
+          old_ifs="$IFS"
+          IFS='
+        '
+          partmap="`"${grub_probe}" --device $@ --target=partmap`"
+          for module in ${partmap} ; do
+            case "${module}" in
+              netbsd | openbsd)
+                echo "insmod part_bsd";;
+              *)
+                echo "insmod part_${module}";;
+            esac
+          done
+        """
+
+        """
+          # Abstraction modules aren't auto-loaded.
+          abstraction="`"${grub_probe}" --device $@ --target=abstraction`"
+        """
+        try:
+            abstraction = grub_command("grub-probe",
+                                       ['--device', *self.grub_devices, '--target=abstraction'])
+        except RuntimeError:
+            pass
+        else:
+            lines.extend([f"insmod {m}" for m in abstraction if m.strip() != ''])
+
+        """
+          fs="`"${grub_probe}" --device $@ --target=fs`"
+        """
+        try:
+            fs = grub_command("grub-probe",
+                              ['--device', *self.grub_devices, '--target=fs'])
+        except RuntimeError:
+            pass
+        else:
+            lines.extend([f"insmod {f}" for f in fs if f.strip() != ''])
+
+        """
+        if [ x$GRUB_ENABLE_CRYPTODISK = xy ]; then
+          for uuid in `"${grub_probe}" --device $@ --target=cryptodisk_uuid`; do
+          echo "cryptomount -u $uuid"
+          done
+        fi
+        """
+        if self.grub_enable_cryptodisk:
+            try:
+                crypt_uuids = grub_command("grub-probe",
+                                           ['--device', *self.grub_devices,
+                                            '--target=cryptodisk_uuid'])
+            except RuntimeError:
+                pass
+            else:
+                lines.extend(
+                    [f"cryptomount -u {uuid}" for uuid in crypt_uuids if uuid.strip() != ''])
+
+        """        
+          # If there's a filesystem UUID that GRUB is capable of identifying, use it;
+          # otherwise set root as per value in device.map.
+          fs_hint="`"${grub_probe}" --device $@ --target=compatibility_hint`"
+          if [ "x$fs_hint" != x ]; then
+            echo "set root='$fs_hint'"
+          fi
+        """
+        try:
+            fs_hint = grub_command("grub-probe",
+                                   ['--device',
+                                    *self.grub_devices,
+                                    '--target=compatibility_hint'])
+        except RuntimeError:
+            pass
+        else:
+            if fs_hint and fs_hint[0].strip() != '':
+                hint = ''.join(fs_hint).strip()
+                lines.append(f"set root='{hint}'")
+        """
+          if fs_uuid="`"${grub_probe}" --device $@ --target=fs_uuid 2> /dev/null`" ; then
+            hints="`"${grub_probe}" --device $@ --target=hints_string 2> /dev/null`" || hints=
+            echo "if [ x\$feature_platform_search_hint = xy ]; then"
+            echo "  search --no-floppy --fs-uuid --set=root ${hints} ${fs_uuid}"
+            echo "else"
+            echo "  search --no-floppy --fs-uuid --set=root ${fs_uuid}"
+            echo "fi"
+          fi
+        """
+        try:
+            fs_uuid = grub_command("grub-probe",
+                                   ['--device', *self.grub_devices, '--target=fs_uuid'],
+                                   stderr=subprocess.DEVNULL)
+        except RuntimeError:
+            pass
+        else:
+            try:
+                hints_string = grub_command("grub-probe",
+                                            ['--device', *self.grub_devices,
+                                             '--target=hints_string'],
+                                            stderr=subprocess.DEVNULL)
+            except RuntimeError:
+                hints_string = None
+
+            both_fs_string = fs_uuid[0]
+            if hints_string:
+                hints_string_joined = ''.join(hints_string).strip()
+                if hints_string_joined != '':
+                    both_fs_string = f"{both_fs_string} {hints_string[0]}"
+
+            lines.extend(
+                [
+                    "if [ x$feature_platform_search_hint = xy ]; then",
+                    f"  search --no-floppy --fs-uuid --set=root {both_fs_string}",
+                    "else",
+                    f"  search --no-floppy --fs-uuid --set=root {fs_uuid[0]}",
+                    "fi"
+                ]
+            )
+
+        return lines
 
     def generate_entry(self, grub_class, grub_args, entry_type,
                        entry_indentation: int = 0) -> List[str]:
@@ -132,6 +269,28 @@ class GrubLinuxEntry:
                 title = f"{self.grub_os} with Linux {self.version}"
 
             # TODO: If matches default...
+            """
+            if [ x"$title" = x"$GRUB_ACTUAL_DEFAULT" ] || \
+                        [ x"Previous Linux versions>$title" = x"$GRUB_ACTUAL_DEFAULT" ]; then
+
+                replacement_title="$(echo "Advanced options for ${OS}" | \
+                    sed 's,>,>>,g')>$(echo "$title" | sed 's,>,>>,g')"
+
+                quoted="$(echo "$GRUB_ACTUAL_DEFAULT" | grub_quote)"
+
+                # NO ACTUAL NEWLINE MID COMMAND in original
+                title_correction_code="${title_correction_code}
+                    if [ \"x\$default\" = '$quoted' ]; then
+                        default='$(echo "$replacement_title" | grub_quote)';
+                    fi;"
+            fi
+            """
+            """
+            if self.grub_default_entry == (title or f"Previous Linux versions>{title}"):
+                title_prefix = f"Advanced options for {self.grub_os}".replace('>', '>>') + ">"
+                replacement_title = title_prefix + title.replace('>', '>>')
+                # Not quite sure why above replacing '>' is necessary, based on above shell code
+            """
 
             entry.append(
                 self.entry_line(
@@ -156,9 +315,10 @@ class GrubLinuxEntry:
             entry.append(self.entry_line(f"set gfxpayload={self.grub_gfxpayload_linux}",
                                          submenu_indent=entry_indentation + 1))
 
-            entry.append(self.entry_line(f"insmod gzio", submenu_indent=entry_indentation + 1))
+        entry.append(self.entry_line(f"insmod gzio", submenu_indent=entry_indentation + 1))
 
-        # TODO: prepare_grub_to_access_device section
+        for module in self.prepare_grub_to_access_device():
+            entry.append(self.entry_line(module, submenu_indent=entry_indentation + 1))
 
         entry.append(self.entry_line(f"echo 'Loading Linux {self.version} ...'",
                                      submenu_indent=entry_indentation + 1))
@@ -290,6 +450,8 @@ class Generator:
 
         grub_class = "--class gnu-linux --class gnu --class os"
 
+        os.environ['ZPOOL_VDEV_NAME_PATH'] = '1'
+
         if "GRUB_DISTRIBUTOR" in os.environ:
             grub_distributor = os.environ['GRUB_DISTRIBUTOR']
             self.grub_os = f"{grub_distributor} GNU/Linux"
@@ -351,10 +513,31 @@ class Generator:
             self.root_dataset, 'org.zedenv.grub:bootonzfs')
         if grub_boot_on_zfs.lower() == ("1" or "yes"):
             self.grub_boot_on_zfs = True
-            self.boot_env_kernels = os.path.join(self.grub_boot, "zfsenv")
         else:
-            self.grub_boot_on_zfs = False
-            self.boot_env_kernels = os.path.join(self.grub_boot, "env")
+            try:
+                grub_boot_device_type = grub_command("grub-probe",
+                                                     ['--target=device', self.grub_boot])[0]
+            except RuntimeError:
+                grub_boot_device_type = None
+
+            if grub_boot_device_type == "zfs":
+                self.grub_boot_on_zfs = True
+            else:
+                self.grub_boot_on_zfs = False
+
+        boot_env_dir = "zfsenv" if self.grub_boot_on_zfs else "env"
+        self.boot_env_kernels = os.path.join(self.grub_boot, boot_env_dir)
+
+        # /usr/bin/grub-probe --target=device /
+        try:
+            grub_device_temp = grub_command("grub-probe", ['--target=device', "/"])
+        except RuntimeError as err:
+            sys.exit(f"Failed to probe root device.\n{err}")
+
+        if grub_device_temp:
+            self.grub_devices: list = grub_device_temp
+
+        self.default = ""
 
         self.boot_list = self.get_boot_environments_boot_list()
 
@@ -383,7 +566,6 @@ class Generator:
     def get_boot_environments_boot_list(self) -> List[Optional[dict]]:
         """
         Get a list of dicts containing all BE kernels
-        :return:
         """
 
         vmlinuz = r'(vmlinuz-.*)'
@@ -405,7 +587,7 @@ class Generator:
             boot_files = os.listdir(boot_dir)
             kernel_matches = [i for i in boot_files
                               if boot_regex.match(i) and self.file_valid(
-                                                                os.path.join(boot_dir, i))]
+                    os.path.join(boot_dir, i))]
 
             boot_entries.append({
                 "directory": boot_dir,
@@ -418,20 +600,6 @@ class Generator:
     def get_regular_grub_boot_list(self, boot_path: str = "/boot"):
         """
         Check if grub list item shows up
-
-        machine=`uname -m`
-        case "x$machine" in
-            xi?86 | xx86_64)
-            list=
-            for i in /boot/vmlinuz-* /vmlinuz-* /boot/kernel-* ; do
-                if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
-            done ;;
-            *)
-            list=
-            for i in /boot/vmlinuz-* /boot/vmlinux-* /vmlinuz-* /vmlinux-* /boot/kernel-* ; do
-                          if grub_file_is_not_garbage "$i" ; then list="$list $i" ; fi
-            done ;;
-        esac
         """
 
         boot_list = []
@@ -486,7 +654,7 @@ class Generator:
                 grub_entry = GrubLinuxEntry(
                     os.path.join(i['directory'], j), self.grub_os, self.be_root, self.rpool,
                     self.genkernel_arch, i, self.grub_cmdline_linux,
-                    self.grub_cmdline_linux_default)
+                    self.grub_cmdline_linux_default, self.grub_devices, self.default)
                 self.linux_entries.append(grub_entry)
 
                 if is_top_level and not self.grub_disable_submenu:
