@@ -67,11 +67,13 @@ class GrubLinuxEntry:
                  grub_cmdline_linux: str,
                  grub_cmdline_linux_default: str,
                  grub_devices: Optional[List[str]],
-                 default: str):
+                 default: str,
+                 grub_boot_on_zfs: bool):
 
         self.grub_cmdline_linux = grub_cmdline_linux
         self.grub_cmdline_linux_default = grub_cmdline_linux_default
         self.grub_devices = grub_devices
+        self.grub_boot_on_zfs = grub_boot_on_zfs
 
         self.linux = linux
         self.grub_os = grub_os
@@ -409,7 +411,11 @@ class GrubLinuxEntry:
         """
         Get name of BE from kernel directory
         """
-        target = re.search(r'zedenv-(.*)/*$', self.dirname)
+        if self.grub_boot_on_zfs:
+            target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
+        else:
+            target = re.search(r'zedenv-(.*)/*$', self.dirname)
+
         if target:
             return target.group(1)
         return None
@@ -516,11 +522,18 @@ class Generator:
         else:
             try:
                 grub_boot_device_type = grub_command("grub-probe",
-                                                     ['--target=device', self.grub_boot])[0]
+                                                     ['--target=device', self.grub_boot])
             except RuntimeError:
                 grub_boot_device_type = None
 
-            if grub_boot_device_type == "zfs":
+            try:
+                fs_type = grub_command("grub-probe",
+                                           ['--device', *grub_boot_device_type,
+                                            '--target=fs'])
+            except RuntimeError:
+                fs_type = None
+
+            if fs_type and ''.join(fs_type).strip() == "zfs":
                 self.grub_boot_on_zfs = True
             else:
                 self.grub_boot_on_zfs = False
@@ -581,13 +594,16 @@ class Generator:
             boot_regex = re.compile(boot_search)
 
         boot_entries = []
+
         for e in os.listdir(self.boot_env_kernels):
-            boot_dir = os.path.join(self.boot_env_kernels, e)
+            be_boot_dir = os.path.join(e, "boot") if self.grub_boot_on_zfs else e
+
+            boot_dir = os.path.join(self.boot_env_kernels, be_boot_dir)
 
             boot_files = os.listdir(boot_dir)
             kernel_matches = [i for i in boot_files
                               if boot_regex.match(i) and self.file_valid(
-                    os.path.join(boot_dir, i))]
+                                                                    os.path.join(boot_dir, i))]
 
             boot_entries.append({
                 "directory": boot_dir,
@@ -596,34 +612,6 @@ class Generator:
             })
 
         return boot_entries
-
-    def get_regular_grub_boot_list(self, boot_path: str = "/boot"):
-        """
-        Check if grub list item shows up
-        """
-
-        boot_list = []
-
-        vmlinuz = r'(/vmlinuz-.*)'
-        vmlinux = r'(/vmlinux-.*)'
-        kernel = r'(/kernel-.*)'
-
-        boot_entries = [os.path.join(boot_path, e) for e in os.listdir(boot_path)]
-        boot_entries.extend([os.path.join(boot_path, e) for e in os.listdir("/")])
-
-        boot_search = f"{boot_path}{vmlinuz}|{boot_path}{kernel}|{vmlinuz}"
-
-        if re.search(r'(i[36]86)|x86_64', self.machine):
-            boot_regex = re.compile(boot_search)
-        else:
-            boot_search = f"{boot_search}|{boot_path}{vmlinux}|{vmlinux}"
-            boot_regex = re.compile(boot_search)
-
-        for i in boot_entries:
-            if boot_regex.search(i) and self.file_valid(i):
-                boot_list.append(i)
-
-        return boot_list
 
     def get_genkernel_arch(self):
 
@@ -641,8 +629,6 @@ class Generator:
 
         return self.machine
 
-    # grub_class, grub_args,
-    # entry_indentation: int = 0) -> List[str]:
     def generate_grub_entries(self):
         indent = 0
         is_top_level = True
@@ -654,7 +640,8 @@ class Generator:
                 grub_entry = GrubLinuxEntry(
                     os.path.join(i['directory'], j), self.grub_os, self.be_root, self.rpool,
                     self.genkernel_arch, i, self.grub_cmdline_linux,
-                    self.grub_cmdline_linux_default, self.grub_devices, self.default)
+                    self.grub_cmdline_linux_default, self.grub_devices, self.default,
+                    self.grub_boot_on_zfs)
                 self.linux_entries.append(grub_entry)
 
                 if is_top_level and not self.grub_disable_submenu:
