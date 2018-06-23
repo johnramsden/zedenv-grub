@@ -68,11 +68,14 @@ class GrubLinuxEntry:
                  grub_cmdline_linux_default: str,
                  grub_devices: Optional[List[str]],
                  default: str,
-                 grub_boot_on_zfs: bool):
+                 grub_boot_on_zfs: bool,
+                 grub_device_boot: str):
 
         self.grub_cmdline_linux = grub_cmdline_linux
         self.grub_cmdline_linux_default = grub_cmdline_linux_default
         self.grub_devices = grub_devices
+        self.grub_device_boot = grub_device_boot
+
         self.grub_boot_on_zfs = grub_boot_on_zfs
 
         self.linux = linux
@@ -160,9 +163,16 @@ class GrubLinuxEntry:
           # Abstraction modules aren't auto-loaded.
           abstraction="`"${grub_probe}" --device $@ --target=abstraction`"
         """
+
+        if self.grub_boot_on_zfs:
+            devices = self.grub_devices
+        else:
+            devices = self.grub_device_boot
+
+
         try:
             abstraction = grub_command("grub-probe",
-                                       ['--device', *self.grub_devices, '--target=abstraction'])
+                                       ['--device', *devices, '--target=abstraction'])
         except RuntimeError:
             pass
         else:
@@ -173,7 +183,7 @@ class GrubLinuxEntry:
         """
         try:
             fs = grub_command("grub-probe",
-                              ['--device', *self.grub_devices, '--target=fs'])
+                              ['--device', *devices, '--target=fs'])
         except RuntimeError:
             pass
         else:
@@ -189,7 +199,7 @@ class GrubLinuxEntry:
         if self.grub_enable_cryptodisk:
             try:
                 crypt_uuids = grub_command("grub-probe",
-                                           ['--device', *self.grub_devices,
+                                           ['--device', *devices,
                                             '--target=cryptodisk_uuid'])
             except RuntimeError:
                 pass
@@ -208,7 +218,7 @@ class GrubLinuxEntry:
         try:
             fs_hint = grub_command("grub-probe",
                                    ['--device',
-                                    *self.grub_devices,
+                                    *devices,
                                     '--target=compatibility_hint'])
         except RuntimeError:
             pass
@@ -228,14 +238,14 @@ class GrubLinuxEntry:
         """
         try:
             fs_uuid = grub_command("grub-probe",
-                                   ['--device', *self.grub_devices, '--target=fs_uuid'],
+                                   ['--device', *devices, '--target=fs_uuid'],
                                    stderr=subprocess.DEVNULL)
         except RuntimeError:
             pass
         else:
             try:
                 hints_string = grub_command("grub-probe",
-                                            ['--device', *self.grub_devices,
+                                            ['--device', *devices,
                                              '--target=hints_string'],
                                             stderr=subprocess.DEVNULL)
             except RuntimeError:
@@ -515,21 +525,22 @@ class Generator:
         if not self.grub_boot or self.grub_boot == "-":
             self.grub_boot = "/mnt/boot"
 
+        # Get boot device
+        try:
+            self.grub_boot_device = grub_command("grub-probe",
+                                            ['--target=device', self.grub_boot])
+        except RuntimeError as err:
+            sys.exit(f"Failed to probe boot device.\n{err}")
+
         grub_boot_on_zfs = zedenv.lib.be.get_property(
             self.root_dataset, 'org.zedenv.grub:bootonzfs')
         if grub_boot_on_zfs.lower() == ("1" or "yes"):
             self.grub_boot_on_zfs = True
         else:
             try:
-                grub_boot_device_type = grub_command("grub-probe",
-                                                     ['--target=device', self.grub_boot])
-            except RuntimeError:
-                grub_boot_device_type = None
-
-            try:
                 fs_type = grub_command("grub-probe",
-                                           ['--device', *grub_boot_device_type,
-                                            '--target=fs'])
+                                       ['--device', *self.grub_boot_device,
+                                        '--target=fs'])
             except RuntimeError:
                 fs_type = None
 
@@ -641,7 +652,7 @@ class Generator:
                     os.path.join(i['directory'], j), self.grub_os, self.be_root, self.rpool,
                     self.genkernel_arch, i, self.grub_cmdline_linux,
                     self.grub_cmdline_linux_default, self.grub_devices, self.default,
-                    self.grub_boot_on_zfs)
+                    self.grub_boot_on_zfs, self.grub_boot_device)
                 self.linux_entries.append(grub_entry)
 
                 if is_top_level and not self.grub_disable_submenu:
