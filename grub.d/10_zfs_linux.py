@@ -169,7 +169,6 @@ class GrubLinuxEntry:
         else:
             devices = self.grub_device_boot
 
-
         try:
             abstraction = grub_command("grub-probe",
                                        ['--device', *devices, '--target=abstraction'])
@@ -275,10 +274,11 @@ class GrubLinuxEntry:
         entry = []
 
         if entry_type != "simple":
+            title_prefix = f"{self.grub_os} BE [{self.boot_environment}] with Linux {self.version}"
             if entry_type == "recovery":
-                title = f"{self.grub_os} with Linux {self.version} (recovery mode)"
+                title = f"{title_prefix} (recovery mode)"
             else:
-                title = f"{self.grub_os} with Linux {self.version}"
+                title = title_prefix
 
             # TODO: If matches default...
             """
@@ -311,8 +311,9 @@ class GrubLinuxEntry:
                     submenu_indent=entry_indentation))
         else:
             entry.append(self.entry_line(
-                f"menuentry '{self.grub_os}' {grub_class} $menuentry_id_option "
-                f"'gnulinux-simple-{self.boot_device_id}' {{", submenu_indent=entry_indentation))
+                f"menuentry '{self.grub_os} BE [{self.boot_environment}]' "
+                f"{grub_class} $menuentry_id_option 'gnulinux-simple-{self.boot_device_id}' {{",
+                submenu_indent=entry_indentation))
 
         # Graphics section
         entry.append(self.entry_line("load_video", submenu_indent=entry_indentation + 1))
@@ -336,7 +337,7 @@ class GrubLinuxEntry:
                                      submenu_indent=entry_indentation + 1))
         rel_linux = os.path.join(self.rel_dirname, self.basename)
         entry.append(
-            self.entry_line(f"linux {rel_linux} root={self.linux_root_device} ro {grub_args}",
+            self.entry_line(f"linux {rel_linux} root={self.linux_root_device} rw {grub_args}",
                             submenu_indent=entry_indentation + 1))
 
         initrd = self.get_initrd()
@@ -512,6 +513,8 @@ class Generator:
         self.rpool = self.root_dataset.split("/")[0]
         self.linux_root_device = f"ZFS={self.rpool}{self.bootfs}"
 
+        self.active_boot_environment = zedenv.lib.be.bootfs_for_pool(self.rpool)
+
         self.machine = platform.machine()
 
         self.invalid_filenames = ["readme"]  # Normalized to lowercase
@@ -528,7 +531,7 @@ class Generator:
         # Get boot device
         try:
             self.grub_boot_device = grub_command("grub-probe",
-                                            ['--target=device', self.grub_boot])
+                                                 ['--target=device', self.grub_boot])
         except RuntimeError as err:
             sys.exit(f"Failed to probe boot device.\n{err}")
 
@@ -613,8 +616,8 @@ class Generator:
 
             boot_files = os.listdir(boot_dir)
             kernel_matches = [i for i in boot_files
-                              if boot_regex.match(i) and self.file_valid(
-                                                                    os.path.join(boot_dir, i))]
+                              if boot_regex.match(i) and self.file_valid(os.path.join(boot_dir, i))
+                              ]
 
             boot_entries.append({
                 "directory": boot_dir,
@@ -653,37 +656,48 @@ class Generator:
                     self.genkernel_arch, i, self.grub_cmdline_linux,
                     self.grub_cmdline_linux_default, self.grub_devices, self.default,
                     self.grub_boot_on_zfs, self.grub_boot_device)
-                self.linux_entries.append(grub_entry)
 
-                if is_top_level and not self.grub_disable_submenu:
-                    # Simple entry
-                    entries.append(
-                        grub_entry.generate_entry(
-                            self.grub_class,
-                            f"{self.grub_cmdline_linux} {self.grub_cmdline_linux_default}",
-                            "simple", entry_indentation=indent))
+                ds = os.path.join(self.be_root, grub_entry.boot_environment)
+                if ds == self.active_boot_environment:
+                    self.linux_entries.insert(0, grub_entry)
+                else:
+                    self.linux_entries.append(grub_entry)
 
-                    # Submenu title
-                    entries.append(
-                        [(f"submenu 'Advanced options for {self.grub_os}' $menuentry_id_option "
-                          f"'gnulinux-advanced-{grub_entry.boot_device_id}' {{")])
-                    is_top_level = False
-                    indent = 1
+        for boot_entry in self.linux_entries:
+            # First few in linux_entries are active, others in submenu
+            if is_top_level and os.path.join(
+                    self.be_root, boot_entry.boot_environment
+            ) != self.active_boot_environment and not self.grub_disable_submenu:
+                is_top_level = False
+                indent = 1
 
-                # Advanced entry
+                # Submenu title
                 entries.append(
-                    grub_entry.generate_entry(
+                    [(f"submenu 'Boot Environments ({self.grub_os})' $menuentry_id_option "
+                      f"'gnulinux-advanced-be-{self.active_boot_environment}' {{")])
+
+            if is_top_level:
+                # Simple entry
+                entries.append(
+                    boot_entry.generate_entry(
                         self.grub_class,
                         f"{self.grub_cmdline_linux} {self.grub_cmdline_linux_default}",
-                        "advanced", entry_indentation=indent))
+                        "simple", entry_indentation=indent))
 
-                # Recovery entry
-                if self.grub_disable_recovery:
-                    entries.append(
-                        grub_entry.generate_entry(
-                            self.grub_class,
-                            f"single {self.grub_cmdline_linux}",
-                            "recovery", entry_indentation=indent))
+            # Advanced entry
+            entries.append(
+                boot_entry.generate_entry(
+                    self.grub_class,
+                    f"{self.grub_cmdline_linux} {self.grub_cmdline_linux_default}",
+                    "advanced", entry_indentation=indent))
+
+            # Recovery entry
+            if self.grub_disable_recovery:
+                entries.append(
+                    boot_entry.generate_entry(
+                        self.grub_class,
+                        f"single {self.grub_cmdline_linux}",
+                        "recovery", entry_indentation=indent))
 
         if not is_top_level:
             entries.append("}")

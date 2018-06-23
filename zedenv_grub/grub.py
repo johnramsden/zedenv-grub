@@ -300,13 +300,18 @@ class GRUB(plugin_config.Plugin):
         if self.bootonzfs:
             self.setup_boot_env_tree()
 
-        # try:
-        #     self.grub_mkconfig()
-        # except RuntimeError as e:
-        #     ZELogger.verbose_log({
-        #         "level": "INFO",
-        #         "message": f"During 'post activate', 'grub-mkconfig' failed with:\n{e}.\n"
-        #     }, self.verbose)
+        try:
+            self.grub_mkconfig()
+        except RuntimeError as e:
+            ZELogger.verbose_log({
+                "level": "INFO",
+                "message": f"During 'post activate', 'grub-mkconfig' failed with:\n{e}.\n"
+            }, self.verbose)
+        else:
+            ZELogger.verbose_log({
+                "level": "INFO",
+                "message": f"Generated GRUB menu successfully at {self.grub_cfg_path}.\n"
+            }, self.verbose)
 
         if self.bootonzfs:
             self.teardown_boot_env_tree()
