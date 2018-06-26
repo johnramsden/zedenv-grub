@@ -590,6 +590,23 @@ class Generator:
 
         return True
 
+    def create_entry(self, kernel_dir: str, search_regex) -> Optional[dict]:
+
+        be_boot_dir = os.path.join(kernel_dir, "boot") if self.grub_boot_on_zfs else kernel_dir
+
+        boot_dir = os.path.join(self.boot_env_kernels, be_boot_dir)
+
+        boot_files = os.listdir(boot_dir)
+        kernel_matches = [i for i in boot_files
+                          if search_regex.match(i) and self.file_valid(os.path.join(boot_dir, i))
+                          ]
+
+        return {
+            "directory": boot_dir,
+            "files": boot_files,
+            "kernels": kernel_matches
+        }
+
     def get_boot_environments_boot_list(self) -> List[Optional[dict]]:
         """
         Get a list of dicts containing all BE kernels
@@ -607,23 +624,11 @@ class Generator:
             boot_search = f"{boot_search}|{vmlinux}"
             boot_regex = re.compile(boot_search)
 
-        boot_entries = []
+        boot_entries = [self.create_entry(e, boot_regex)
+                        for e in os.listdir(self.boot_env_kernels)]
 
-        for e in os.listdir(self.boot_env_kernels):
-            be_boot_dir = os.path.join(e, "boot") if self.grub_boot_on_zfs else e
-
-            boot_dir = os.path.join(self.boot_env_kernels, be_boot_dir)
-
-            boot_files = os.listdir(boot_dir)
-            kernel_matches = [i for i in boot_files
-                              if boot_regex.match(i) and self.file_valid(os.path.join(boot_dir, i))
-                              ]
-
-            boot_entries.append({
-                "directory": boot_dir,
-                "files": boot_files,
-                "kernels": kernel_matches
-            })
+        if self.grub_boot_on_zfs and os.path.exists("/boot"):
+            boot_entries.append(self.create_entry("/boot", boot_regex))
 
         return boot_entries
 
