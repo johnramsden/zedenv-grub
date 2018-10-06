@@ -12,11 +12,26 @@ import zedenv.lib.be
 import zedenv.plugins.configuration as plugin_config
 from zedenv.lib.logger import ZELogger
 
+from typing import Tuple
+
 
 class GRUB(plugin_config.Plugin):
-    systems_allowed = ["linux", "freebsd"]
+    systems_allowed = ["linux"]
 
     bootloader = "grub"
+
+    allowed_properties: Tuple[dict] = (
+        {
+            "property": "boot",
+            "description": "Set location for boot.",
+            "default": "/mnt/boot"
+        },
+        {
+            "property": "bootonzfs",
+            "description": "Use ZFS for /boot.",
+            "default": "no"
+        },
+    )
 
     def __init__(self, zedenv_data: dict):
 
@@ -31,9 +46,9 @@ class GRUB(plugin_config.Plugin):
         self.env_dir = "env"
         self.zfs_env_dir = "zfsenv"
 
-        # Property defaults if unset:
-        self.zedenv_properties["boot"] = "/mnt/boot"
-        self.zedenv_properties["bootonzfs"] = "no"
+        # Set defaults
+        for pr in self.allowed_properties:
+            self.zedenv_properties[pr["property"]] = pr["default"]
 
         self.check_zedenv_properties()
 
