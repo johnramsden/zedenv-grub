@@ -33,6 +33,7 @@ setup(
       'Development Status :: 3 - Alpha',
       'License :: OSI Approved :: BSD License',
       'Programming Language :: Python :: 3.6',
+      'Programming Language :: Python :: 3.7',
     ],
     keywords='cli',
     packages=find_packages(exclude=["*tests*", "test_*"]),
@@ -48,4 +49,5 @@ setup(
         grub = zedenv_grub.grub:GRUB
     """,
     zip_safe=False,
+    data_files=[("/etc/grub.d", ["grub.d/10_zfs_linux.py"])],
 )
