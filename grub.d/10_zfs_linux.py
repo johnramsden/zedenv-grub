@@ -1,4 +1,4 @@
-#!/usr/bin/env python3.6
+#!/usr/bin/env python3
 
 import sys
 
@@ -36,7 +36,7 @@ def normalize_string(str_input: str):
     """
     str_list = []
     for c in str_input.split(" "):
-        san = [l.lower() for l in c if l.isalnum()]
+        san = [lo.lower() for lo in c if lo.isalnum()]
         str_list.append("".join(san))
 
     return "_".join(str_list)
@@ -51,7 +51,7 @@ def grub_command(command: str, call_args: List[str] = None, stderr=subprocess.PI
         cmd_output = subprocess.check_output(
             cmd_call, universal_newlines=True, stderr=stderr)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to run {command}.\n{e}\n.")
+        raise RuntimeError(f"Failed to run {command}.\n{e}\n{cmd_output}.")
 
     return cmd_output.splitlines()
 
@@ -99,7 +99,7 @@ class GrubLinuxEntry:
 
         # Root dataset will double as device ID
         self.linux_root_dataset = os.path.join(
-            f"{self.be_root}", self.boot_environment)
+            self.be_root, self.boot_environment)
         self.linux_root_device = f"ZFS={self.linux_root_dataset}"
         self.boot_device_id = self.linux_root_dataset
 
@@ -423,13 +423,16 @@ class GrubLinuxEntry:
         Get name of BE from kernel directory
         """
         if self.grub_boot_on_zfs:
+            if self.dirname == "/boot":
+                target = re.search(
+                    r'.*/(.*)@/boot$', grub_command("grub-mkrelpath", [self.dirname])[0])
+                return target.group(1) if target else None
+
             target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
         else:
             target = re.search(r'zedenv-(.*)/*$', self.dirname)
 
-        if target:
-            return target.group(1)
-        return None
+        return target.group(1) if target else None
 
     def get_linux_version(self):
         """
@@ -591,8 +594,9 @@ class Generator:
         return True
 
     def create_entry(self, kernel_dir: str, search_regex) -> Optional[dict]:
-
-        be_boot_dir = os.path.join(kernel_dir, "boot") if self.grub_boot_on_zfs else kernel_dir
+        be_boot_dir = kernel_dir
+        if self.grub_boot_on_zfs and not kernel_dir == "/boot":
+            be_boot_dir = os.path.join(kernel_dir, "boot")
 
         boot_dir = os.path.join(self.boot_env_kernels, be_boot_dir)
 
@@ -710,7 +714,8 @@ class Generator:
         return entries
 
 
-grub = Generator()
-for en in grub.generate_grub_entries():
-    for l in en:
-        print(l)
+if __name__ == "__main__":
+    grub = Generator()
+    for en in grub.generate_grub_entries():
+        for l in en:
+            print(l)

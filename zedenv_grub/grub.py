@@ -91,7 +91,7 @@ class GRUB(plugin_config.Plugin):
 
         return grub_output
 
-    def modify_bootloader(self, temp_boot: str,):
+    def modify_bootloader(self, temp_boot: str):
 
         real_kernel_dir = os.path.join(self.zedenv_properties["boot"], "env")
         temp_kernel_dir = os.path.join(temp_boot, "env")
