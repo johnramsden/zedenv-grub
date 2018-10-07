@@ -73,7 +73,7 @@ class GRUB(plugin_config.Plugin):
 
         self.grub_cfg_path = os.path.join(self.grub_boot_dir, self.grub_cfg)
 
-    def grub_mkconfig(self):
+    def grub_mkconfig(self, location: str):
         env = dict(os.environ, ZPOOL_VDEV_NAME_PATH='1')
         ZELogger.verbose_log({
             "level": "INFO",
@@ -81,7 +81,7 @@ class GRUB(plugin_config.Plugin):
                         "the GRUB configuration.\n")
         }, self.verbose)
 
-        grub_call = ["grub-mkconfig", "-o", self.grub_cfg_path]
+        grub_call = ["grub-mkconfig", "-o", location]
 
         try:
             grub_output = subprocess.check_call(grub_call, env=env,
@@ -233,20 +233,21 @@ class GRUB(plugin_config.Plugin):
                         "the GRUB configuration.\n")
         }, self.verbose)
 
-        with tempfile.TemporaryDirectory(prefix="zedenv", suffix=self.bootloader) as t_grub:
-            ZELogger.verbose_log({
-                "level": "INFO",
-                "message": f"Created {t_grub}.\n"
-            }, self.verbose)
+        if not self.bootonzfs:
+            with tempfile.TemporaryDirectory(prefix="zedenv", suffix=self.bootloader) as t_grub:
+                ZELogger.verbose_log({
+                    "level": "INFO",
+                    "message": f"Created {t_grub}.\n"
+                }, self.verbose)
 
-            self.modify_bootloader(t_grub)
-            self.recurse_move(t_grub, self.zedenv_properties["boot"], overwrite=False)
+                self.modify_bootloader(t_grub)
+                self.recurse_move(t_grub, self.zedenv_properties["boot"], overwrite=False)
 
         if self.bootonzfs:
             self.setup_boot_env_tree()
 
         try:
-            self.grub_mkconfig()
+            self.grub_mkconfig(self.grub_cfg_path)
         except RuntimeError as e:
             ZELogger.verbose_log({
                 "level": "INFO",
@@ -257,6 +258,39 @@ class GRUB(plugin_config.Plugin):
                 "level": "INFO",
                 "message": f"Generated GRUB menu successfully at {self.grub_cfg_path}.\n"
             }, self.verbose)
+
+        if self.bootonzfs:
+            mount_root = os.path.join(self.zedenv_properties["boot"], self.zfs_env_dir)
+            be_list = zedenv.lib.be.list_boot_environments(self.be_root, ['name'])
+            ZELogger.verbose_log(
+                {"level": "INFO", "message": f"Going over list {be_list}.\n"}, self.verbose)
+
+            for b in be_list:
+                be_name = pyzfscmds.utility.dataset_child_name(b['name'], False)
+
+                if pyzfscmds.system.agnostic.dataset_mountpoint(b['name']) == "/":
+                    ZELogger.verbose_log({
+                        "level": "INFO",
+                        "message": f"Dataset {b['name']} is root, skipping.\n"
+                    }, self.verbose)
+                else:
+                    be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
+                    grub_dest = os.path.join(be_boot_mount, f"boot/grub/{self.grub_cfg}")
+                    try:
+                        shutil.copy(self.grub_cfg_path, grub_dest)
+                    except PermissionError:
+                        ZELogger.log({
+                            "level": "EXCEPTION",
+                            "message": f"Require Privileges to write to '{grub_dest}.'\n"
+                        }, exit_on_error=True)
+                    except FileNotFoundError:
+                        ZELogger.log({
+                            "level": "EXCEPTION",
+                            "message": f"Location '{grub_dest} couldn't be found.'\n"
+                        }, exit_on_error=True)
+                    ZELogger.verbose_log({
+                        "level": "INFO", "message": f"Copied {self.grub_cfg} to {grub_dest}.\n"
+                    }, self.verbose)
 
         if self.bootonzfs:
             self.teardown_boot_env_tree()
@@ -273,4 +307,5 @@ class GRUB(plugin_config.Plugin):
         replace_pattern = r'(^{real_boot}/{env}/?)(.*)(\s.*{boot}\s.*$)'.format(
             real_boot=self.zedenv_properties["boot"], env=self.env_dir, boot=self.boot_mountpoint)
 
-        self.modify_fstab(be_mountpoint, replace_pattern, self.new_entry)
+        if not self.bootonzfs:
+            self.modify_fstab(be_mountpoint, replace_pattern, self.new_entry)
