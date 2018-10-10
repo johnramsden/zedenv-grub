@@ -12,6 +12,7 @@ makedepends=('git' 'python-pip')
 source=('zedenv-grub::git+https://github.com/johnramsden/zedenv-grub#branch=master')
 md5sums=('SKIP')
 conflicts=('zedenv-grub')
+provides=('zedenv-grub')
 
 pkgver() {
 	cd "${srcdir}/${pkgname%-git}"

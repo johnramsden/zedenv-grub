@@ -65,7 +65,28 @@ class GRUB(plugin_config.Plugin):
             }, exit_on_error=True)
 
         if not os.path.isdir(self.zedenv_properties["boot"]):
-            self.plugin_property_error("boot")
+            if self.bootonzfs:
+                if not self.noop:
+                    try:
+                        os.makedirs(self.zedenv_properties["boot"])
+                    except PermissionError as e:
+                        ZELogger.log({
+                            "level": "EXCEPTION",
+                            "message": ("Require Privileges to write to "
+                                        f"{self.zedenv_properties['boot']}\n{e}")
+                        }, exit_on_error=True)
+                    except OSError as os_err:
+                        ZELogger.log({
+                            "level": "EXCEPTION",
+                            "message": os_err
+                        }, exit_on_error=True)
+                    ZELogger.verbose_log({
+                        "level": "INFO",
+                        "message": ("Created mount directory "
+                                    f"{self.zedenv_properties['boot']}\n")
+                    }, self.verbose)
+            else:
+                self.plugin_property_error("boot")
 
         self.grub_boot_dir = os.path.join(self.boot_mountpoint, "grub")
 
@@ -309,3 +330,6 @@ class GRUB(plugin_config.Plugin):
 
         if not self.bootonzfs:
             self.modify_fstab(be_mountpoint, replace_pattern, self.new_entry)
+
+    def post_destroy(self, target):
+        self.post_activate()
