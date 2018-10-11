@@ -281,39 +281,6 @@ class GRUB(plugin_config.Plugin):
             }, self.verbose)
 
         if self.bootonzfs:
-            mount_root = os.path.join(self.zedenv_properties["boot"], self.zfs_env_dir)
-            be_list = zedenv.lib.be.list_boot_environments(self.be_root, ['name'])
-            ZELogger.verbose_log(
-                {"level": "INFO", "message": f"Going over list {be_list}.\n"}, self.verbose)
-
-            for b in be_list:
-                be_name = pyzfscmds.utility.dataset_child_name(b['name'], False)
-
-                if pyzfscmds.system.agnostic.dataset_mountpoint(b['name']) == "/":
-                    ZELogger.verbose_log({
-                        "level": "INFO",
-                        "message": f"Dataset {b['name']} is root, skipping.\n"
-                    }, self.verbose)
-                else:
-                    be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
-                    grub_dest = os.path.join(be_boot_mount, f"boot/grub/{self.grub_cfg}")
-                    try:
-                        shutil.copy(self.grub_cfg_path, grub_dest)
-                    except PermissionError:
-                        ZELogger.log({
-                            "level": "EXCEPTION",
-                            "message": f"Require Privileges to write to '{grub_dest}.'\n"
-                        }, exit_on_error=True)
-                    except FileNotFoundError:
-                        ZELogger.log({
-                            "level": "EXCEPTION",
-                            "message": f"Location '{grub_dest} couldn't be found.'\n"
-                        }, exit_on_error=True)
-                    ZELogger.verbose_log({
-                        "level": "INFO", "message": f"Copied {self.grub_cfg} to {grub_dest}.\n"
-                    }, self.verbose)
-
-        if self.bootonzfs:
             self.teardown_boot_env_tree()
 
     def pre_activate(self):
