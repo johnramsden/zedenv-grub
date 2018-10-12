@@ -23,14 +23,14 @@ def readme():
 
 setup(
     name='zedenv-grub',
-    version='0.1.0',
+    version='0.0.0',
     description='zedenv Plugin for GRUB',
     url='http://github.com/johnramsden/zedenv',
     author='John Ramsden',
     author_email='johnramsden@riseup.net',
     license='BSD-3-Clause',
     classifiers=[
-      'Development Status :: 3 - Alpha',
+      'Development Status :: 3 - Pre Alpha',
       'License :: OSI Approved :: BSD License',
       'Programming Language :: Python :: 3.6',
       'Programming Language :: Python :: 3.7',

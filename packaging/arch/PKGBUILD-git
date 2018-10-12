@@ -3,7 +3,7 @@
 pkgname=zedenv-grub-git
 pkgver=r103.0f21e17
 pkgrel=1
-pkgdesc="Utility to manage Boot Environments using ZFS"
+pkgdesc="zedenv Plugin for GRUB"
 arch=('any')
 url="http://github.com/johnramsden/zedenv-grub"
 license=('BSD' 'custom:BSD 3 clause')

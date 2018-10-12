@@ -1,18 +1,22 @@
 # Maintainer: John Ramsden <johnramsden [at] riseup [dot] net>
 
-pkgname=zedenv
-pkgver=0.1.1
+pkgname=zedenv-grub
+pkgver=0.0.0
 _version_suffix="alpha"
 pkgrel=1
-pkgdesc="Utility to manage Boot Environments using ZFS"
+pkgdesc="zedenv Plugin for GRUB"
 arch=('any')
-url="http://github.com/johnramsden/zedenv"
+url="http://github.com/johnramsden/zedenvgrub"
 license=('BSD' 'custom:BSD 3 clause')
 depends=('zfs-linux' 'python' 'python-setuptools' 'python-click' 'python-pyzfscmds')
 makedepends=('git' 'python-pip')
+
+# TODO:
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/johnramsden/${pkgname}/archive/v${pkgver}-${_version_suffix}.tar.gz")
-md5sums=('2a38da07513fe7dd40a6c851fbad2589')
-conflicts=('zedenv-git')
+
+# TODO:
+md5sums=('')
+conflicts=('zedenv-grub-git')
 
 build() {
     cd "${srcdir}/${pkgname}-${pkgver}-${_version_suffix}"
