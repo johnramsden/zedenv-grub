@@ -49,5 +49,5 @@ setup(
         grub = zedenv_grub.grub:GRUB
     """,
     zip_safe=False,
-    data_files=[("/etc/grub.d", ["grub.d/10_zfs_linux.py"])],
+    data_files=[("/etc/grub.d", ["grub.d/05_zfs_linux.py"])],
 )
