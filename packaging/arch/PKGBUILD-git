@@ -1,7 +1,7 @@
 # Maintainer: John Ramsden <johnramsden [at] riseup [dot] net>
 
 pkgname=zedenv-grub-git
-pkgver=r103.0f21e17
+pkgver=r146.3fb25d5
 pkgrel=1
 pkgdesc="zedenv Plugin for GRUB"
 arch=('any')
@@ -9,7 +9,7 @@ url="http://github.com/johnramsden/zedenv-grub"
 license=('BSD' 'custom:BSD 3 clause')
 depends=('zfs' 'python' 'python-setuptools' 'python-pyzfscmds' 'zedenv' 'grub')
 makedepends=('git' 'python-pip')
-source=('zedenv-grub::git+https://github.com/johnramsden/zedenv-grub#branch=master')
+source=('zedenv-grub::git+https://github.com/johnramsden/zedenv-grub#branch=grub-generators')
 md5sums=('SKIP')
 conflicts=('zedenv-grub')
 provides=('zedenv-grub')
