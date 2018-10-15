@@ -9,7 +9,7 @@ url="http://github.com/johnramsden/zedenv-grub"
 license=('BSD' 'custom:BSD 3 clause')
 depends=('zfs' 'python' 'python-setuptools' 'python-pyzfscmds' 'zedenv' 'grub')
 makedepends=('git' 'python-pip')
-source=('zedenv-grub::git+https://github.com/johnramsden/zedenv-grub#branch=grub-generators')
+source=('zedenv-grub::git+https://github.com/johnramsden/zedenv-grub#branch=master')
 md5sums=('SKIP')
 conflicts=('zedenv-grub')
 provides=('zedenv-grub')

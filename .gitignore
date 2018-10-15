@@ -58,6 +58,5 @@ Pipfile.lock
 .vscode/
 
 /packaging/arch/*
-!packaging/arch/zedenv
-!packaging/arch/PKGBUILD
+!packaging/arch/**/**/PKGBUILD
 !packaging/arch/PKGBUILD-git
