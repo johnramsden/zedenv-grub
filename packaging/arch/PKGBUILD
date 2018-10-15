@@ -6,16 +6,12 @@ _version_suffix="alpha"
 pkgrel=1
 pkgdesc="zedenv Plugin for GRUB"
 arch=('any')
-url="http://github.com/johnramsden/zedenvgrub"
+url="http://github.com/johnramsden/zedenv-grub"
 license=('BSD' 'custom:BSD 3 clause')
-depends=('zfs-linux' 'python' 'python-setuptools' 'python-click' 'python-pyzfscmds')
+depends=('zfs' 'python' 'python-setuptools' 'python-click' 'python-pyzfscmds')
 makedepends=('git' 'python-pip')
-
-# TODO:
 source=("${pkgname}-${pkgver}.tar.gz::https://github.com/johnramsden/${pkgname}/archive/v${pkgver}-${_version_suffix}.tar.gz")
-
-# TODO:
-md5sums=('')
+md5sums=('6a74270efa48747070aa696d05b7e2f7')
 conflicts=('zedenv-grub-git')
 
 build() {
