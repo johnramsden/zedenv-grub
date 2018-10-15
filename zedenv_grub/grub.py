@@ -29,7 +29,7 @@ class GRUB(plugin_config.Plugin):
         {
             "property": "bootonzfs",
             "description": "Use ZFS for /boot.",
-            "default": "no"
+            "default": "yes"
         },
     )
 
@@ -126,7 +126,7 @@ class GRUB(plugin_config.Plugin):
                 "message": (f"No directory for Boot environments kernels found at "
                             f"'{real_old_dataset_kernel}', creating empty directory."
                             f"Don't forget to add your kernel to "
-                            f"{real_kernel_dir}/{self.boot_environment}.")
+                            f"{real_kernel_dir}/zedenv-{self.boot_environment}.")
             })
             if not self.noop:
                 try:
