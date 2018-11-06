@@ -33,7 +33,7 @@ class GRUB(plugin_config.Plugin):
         },
     )
 
-    def __init__(self, zedenv_data: dict):
+    def __init__(self, zedenv_data: dict, skip_update: bool=False, skip_cleanup: bool=False):
 
         super().__init__(zedenv_data)
 
@@ -45,6 +45,10 @@ class GRUB(plugin_config.Plugin):
         self.boot_mountpoint = "/boot"
         self.env_dir = "env"
         self.zfs_env_dir = "zfsenv"
+
+        self.skip_update_grub = skip_update
+
+        self.skip_cleanup = skip_cleanup
 
         # Set defaults
         for pr in self.allowed_properties:
@@ -64,9 +68,9 @@ class GRUB(plugin_config.Plugin):
                             "'yes', 'no', '0', or '1'. Exiting.\n")
             }, exit_on_error=True)
 
-        if not os.path.isdir(self.zedenv_properties["boot"]):
-            if self.bootonzfs:
-                if not self.noop:
+        if self.bootonzfs:
+            if not self.noop:
+                if not os.path.isdir(self.zedenv_properties["boot"]):
                     try:
                         os.makedirs(self.zedenv_properties["boot"])
                     except PermissionError as e:
@@ -76,16 +80,30 @@ class GRUB(plugin_config.Plugin):
                                         f"{self.zedenv_properties['boot']}\n{e}")
                         }, exit_on_error=True)
                     except OSError as os_err:
-                        ZELogger.log({
-                            "level": "EXCEPTION",
-                            "message": os_err
-                        }, exit_on_error=True)
+                        ZELogger.log({"level": "EXCEPTION", "message": os_err},
+                                     exit_on_error=True)
                     ZELogger.verbose_log({
                         "level": "INFO",
                         "message": ("Created mount directory "
                                     f"{self.zedenv_properties['boot']}\n")
                     }, self.verbose)
-            else:
+
+                zfs_env_dir_path = os.path.join(
+                    self.zedenv_properties["boot"], self.zfs_env_dir)
+                if not os.path.isdir(zfs_env_dir_path):
+                    try:
+                        os.makedirs(zfs_env_dir_path)
+                    except PermissionError as e:
+                        ZELogger.log({
+                            "level": "EXCEPTION",
+                            "message": (f"Require Privileges to write to "
+                                        f"{zfs_env_dir_path}\n{e}")
+                        }, exit_on_error=True)
+                    except OSError as os_err:
+                        ZELogger.log({"level": "EXCEPTION", "message": os_err},
+                                     exit_on_error=True)
+        else:
+            if not os.path.isdir(self.zedenv_properties["boot"]):
                 self.plugin_property_error("boot")
 
         self.grub_boot_dir = os.path.join(self.boot_mountpoint, "grub")
@@ -267,20 +285,21 @@ class GRUB(plugin_config.Plugin):
         if self.bootonzfs:
             self.setup_boot_env_tree()
 
-        try:
-            self.grub_mkconfig(self.grub_cfg_path)
-        except RuntimeError as e:
-            ZELogger.verbose_log({
-                "level": "INFO",
-                "message": f"During 'post activate', 'grub-mkconfig' failed with:\n{e}.\n"
-            }, self.verbose)
-        else:
-            ZELogger.verbose_log({
-                "level": "INFO",
-                "message": f"Generated GRUB menu successfully at {self.grub_cfg_path}.\n"
-            }, self.verbose)
+        if not self.skip_update_grub:
+            try:
+                self.grub_mkconfig(self.grub_cfg_path)
+            except RuntimeError as e:
+                ZELogger.verbose_log({
+                    "level": "INFO",
+                    "message": f"During 'post activate', 'grub-mkconfig' failed with:\n{e}.\n"
+                }, self.verbose)
+            else:
+                ZELogger.verbose_log({
+                    "level": "INFO",
+                    "message": f"Generated GRUB menu successfully at {self.grub_cfg_path}.\n"
+                }, self.verbose)
 
-        if self.bootonzfs:
+        if self.bootonzfs and not self.skip_cleanup:
             self.teardown_boot_env_tree()
 
     def pre_activate(self):

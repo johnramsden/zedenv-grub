@@ -8,7 +8,13 @@ import pyzfscmds.system.agnostic
 import pyzfscmds.utility
 import re
 import subprocess
+
 import zedenv.lib.be
+import zedenv.lib.check
+import zedenv.lib.configure
+
+import zedenv_grub.grub
+
 from typing import List, Optional
 
 
@@ -715,7 +721,57 @@ class Generator:
 
 
 if __name__ == "__main__":
-    grub = Generator()
-    for en in grub.generate_grub_entries():
-        for l in en:
-            print(l)
+
+    ran_activate = False
+    bootloader_plugin = None
+
+    if pyzfscmds.system.agnostic.check_valid_system():
+
+        # Only execute if run by 'zedenv activate'
+        if not zedenv.lib.check.Pidfile()._check():
+            boot_environment_root = zedenv.lib.be.root()
+
+            bootloader_set = zedenv.lib.be.get_property(
+                boot_environment_root, "org.zedenv:bootloader")
+
+            if bootloader_set:
+                bootloader = bootloader_set if bootloader_set != '-' else None
+            else:
+                sys.exit(0)
+
+            root_dataset = pyzfscmds.system.agnostic.mountpoint_dataset("/")
+            zpool = zedenv.lib.be.dataset_pool(root_dataset)
+
+            current_be = None
+            try:
+                current_be = pyzfscmds.utility.dataset_child_name(
+                    zedenv.lib.be.bootfs_for_pool(zpool))
+            except RuntimeError:
+                sys.exit(0)
+
+            bootloader_plugin = zedenv_grub.grub.GRUB({
+                        'boot_environment': current_be,
+                        'old_boot_environment': current_be,
+                        'bootloader': "grub",
+                        'verbose': False,
+                        'noconfirm': False,
+                        'noop': False,
+                        'boot_environment_root': boot_environment_root
+                    }, skip_update=True, skip_cleanup=True)
+
+            if not bootloader_plugin.bootloader == "grub":
+                sys.exit(0)
+
+            try:
+                bootloader_plugin.post_activate()
+            except (RuntimeWarning, RuntimeError, AttributeError) as err:
+                sys.exit(0)
+            else:
+                ran_activate = True
+
+        for en in Generator().generate_grub_entries():
+            for l in en:
+                print(l)
+
+        if ran_activate and bootloader_plugin:
+            bootloader_plugin.teardown_boot_env_tree()
