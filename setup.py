@@ -23,7 +23,7 @@ def readme():
 
 setup(
     name='zedenv-grub',
-    version='0.1.0',
+    version=__version__,
     description='zedenv Plugin for GRUB',
     url='http://github.com/johnramsden/zedenv',
     author='John Ramsden',
