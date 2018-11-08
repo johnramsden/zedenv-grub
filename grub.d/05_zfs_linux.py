@@ -729,6 +729,7 @@ if __name__ == "__main__":
 
         # Only execute if run by 'zedenv activate'
         if not zedenv.lib.check.Pidfile()._check():
+
             boot_environment_root = zedenv.lib.be.root()
 
             bootloader_set = zedenv.lib.be.get_property(

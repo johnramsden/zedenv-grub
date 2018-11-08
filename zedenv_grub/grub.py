@@ -186,30 +186,31 @@ class GRUB(plugin_config.Plugin):
             {"level": "INFO", "message": f"Going over list {be_list}.\n"}, self.verbose)
 
         for b in be_list:
-            be_name = pyzfscmds.utility.dataset_child_name(b['name'], False)
+            if not pyzfscmds.utility.is_snapshot(b['name']):
+                be_name = pyzfscmds.utility.dataset_child_name(b['name'], False)
 
-            if pyzfscmds.system.agnostic.dataset_mountpoint(b['name']) == "/":
-                ZELogger.verbose_log({
-                    "level": "INFO",
-                    "message": f"Dataset {b['name']} is root, skipping.\n"
-                }, self.verbose)
-            else:
-                be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
-                ZELogger.verbose_log(
-                    {"level": "INFO", "message": f"Setting up {b['name']}.\n"}, self.verbose)
-
-                if not os.path.exists(be_boot_mount):
-                    os.mkdir(be_boot_mount)
-
-                if not os.listdir(be_boot_mount):
-                    zedenv.cli.mount.zedenv_mount(be_name,
-                                                  be_boot_mount,
-                                                  self.verbose, self.be_root)
-                else:
+                if pyzfscmds.system.agnostic.dataset_mountpoint(b['name']) == "/":
                     ZELogger.verbose_log({
-                        "level": "WARNING",
-                        "message": f"Mount directory {be_boot_mount} wasn't empty, skipping.\n"
+                        "level": "INFO",
+                        "message": f"Dataset {b['name']} is root, skipping.\n"
                     }, self.verbose)
+                else:
+                    be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
+                    ZELogger.verbose_log(
+                        {"level": "INFO", "message": f"Setting up {b['name']}.\n"}, self.verbose)
+
+                    if not os.path.exists(be_boot_mount):
+                        os.mkdir(be_boot_mount)
+
+                    if not os.listdir(be_boot_mount):
+                        zedenv.cli.mount.zedenv_mount(be_name,
+                                                      be_boot_mount,
+                                                      self.verbose, self.be_root)
+                    else:
+                        ZELogger.verbose_log({
+                            "level": "WARNING",
+                            "message": f"Mount directory {be_boot_mount} wasn't empty, skipping.\n"
+                        }, self.verbose)
 
     def teardown_boot_env_tree(self):
         mount_root = os.path.join(self.zedenv_properties["boot"], self.zfs_env_dir)
