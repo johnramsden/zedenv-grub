@@ -212,7 +212,7 @@ class GrubLinuxEntry:
                 lines.extend(
                     [f"cryptomount -u {uuid}" for uuid in crypt_uuids if uuid.strip() != ''])
 
-        """        
+        """
           # If there's a filesystem UUID that GRUB is capable of identifying, use it;
           # otherwise set root as per value in device.map.
           fs_hint="`"${grub_probe}" --device $@ --target=compatibility_hint`"
@@ -412,8 +412,9 @@ class GrubLinuxEntry:
                        f"initrd-{self.version}.img",
                        f"initrd-{self.version}.gz",
                        f"initrd-{self.version}",
+                       f"initramfs-{self.version}",
                        f"initramfs-{self.version}.img",
-                       f"initramfs-genkernel-{self.version}"
+                       f"initramfs-genkernel-{self.version}",
                        f"initramfs-genkernel-{self.genkernel_arch}-{self.version}"]
 
         initrd_real = next(
