@@ -256,7 +256,7 @@ class GRUB(plugin_config.Plugin):
                                 "message": f"Removed directory {mount_path}.\n"
                             }, self.verbose)
 
-        if cleanup:
+        if cleanup and os.path.exists(mount_root):
             try:
                 os.rmdir(mount_root)
             except OSError as ex:
