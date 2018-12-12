@@ -63,7 +63,7 @@ An example system on Arch Linux with a separate partition for kernels would be t
 * Boot partition mounted to ``/mnt/boot``. 
 * The directory containing kernels for the active boot environment, ``/mnt/boot/env/zedenv-${boot_env}`` bind mounted to ``/boot``. 
 * The grub directory ``/mnt/boot/grub`` bindmounted to ``/boot/grub``
-* ``org.zedenv.grub:bootonzfs``should be set to ``no``
+* ``org.zedenv.grub:bootonzfs`` should be set to ``no`` with ``zedenv set org.zedenv.grub:bootonzfs=no``
 
 What this would look like during an arch Linux install would be the following: 
 
