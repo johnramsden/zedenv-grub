@@ -57,7 +57,7 @@ def grub_command(command: str, call_args: List[str] = None, stderr=subprocess.PI
         cmd_output = subprocess.check_output(
             cmd_call, universal_newlines=True, stderr=stderr)
     except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Failed to run {command}.\n{e}\n{cmd_output}.")
+        raise RuntimeError(f"Failed to run {command}.\n{e}.")
 
     return cmd_output.splitlines()
 
@@ -369,7 +369,7 @@ class GrubLinuxEntry:
             with open(self.kernel_config) as f:
                 config = f.read().splitlines()
 
-            config_match = next((reg.match(l).group(1) for l in config if reg.match(l)), None)
+            config_match = next((reg.match(lm).group(1) for lm in config if reg.match(lm)), None)
 
         return config_match
 
@@ -542,8 +542,8 @@ class Generator:
         try:
             self.grub_boot_device = grub_command("grub-probe",
                                                  ['--target=device', self.grub_boot])
-        except RuntimeError as err:
-            sys.exit(f"Failed to probe boot device.\n{err}")
+        except RuntimeError as err1:
+            sys.exit(f"Failed to probe boot device.\n{err1}")
 
         grub_boot_on_zfs = zedenv.lib.be.get_property(
             self.root_dataset, 'org.zedenv.grub:bootonzfs')
@@ -562,14 +562,21 @@ class Generator:
             else:
                 self.grub_boot_on_zfs = False
 
+        simpleentries_set = zedenv.lib.be.get_property(
+            self.root_dataset, "org.zedenv.grub:simpleentries")
+
+        self.simpleentries = True
+        if simpleentries_set and simpleentries_set.lower() in ("n", "no", "0"):
+            self.simpleentries = False
+
         boot_env_dir = "zfsenv" if self.grub_boot_on_zfs else "env"
         self.boot_env_kernels = os.path.join(self.grub_boot, boot_env_dir)
 
         # /usr/bin/grub-probe --target=device /
         try:
             grub_device_temp = grub_command("grub-probe", ['--target=device', "/"])
-        except RuntimeError as err:
-            sys.exit(f"Failed to probe root device.\n{err}")
+        except RuntimeError as err0:
+            sys.exit(f"Failed to probe root device.\n{err0}")
 
         if grub_device_temp:
             self.grub_devices: list = grub_device_temp
@@ -692,7 +699,7 @@ class Generator:
                     [(f"submenu 'Boot Environments ({self.grub_os})' $menuentry_id_option "
                       f"'gnulinux-advanced-be-{self.active_boot_environment}' {{")])
 
-            if is_top_level:
+            if is_top_level and self.simpleentries:
                 # Simple entry
                 entries.append(
                     boot_entry.generate_entry(

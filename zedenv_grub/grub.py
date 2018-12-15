@@ -31,6 +31,11 @@ class GRUB(plugin_config.Plugin):
             "description": "Use ZFS for /boot.",
             "default": "yes"
         },
+        {
+            "property": "simpleentries",
+            "description": "Add simple entries in GRUB.",
+            "default": "yes"
+        }
     )
 
     def __init__(self, zedenv_data: dict, skip_update: bool=False, skip_cleanup: bool=False):
