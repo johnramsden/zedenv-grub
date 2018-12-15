@@ -320,3 +320,9 @@ class GRUB(plugin_config.Plugin):
 
     def post_destroy(self, target):
         self.post_activate()
+
+    def post_create(self):
+        self.post_activate()
+
+    def post_rename(self):
+        self.post_activate()
