@@ -8,6 +8,8 @@ import pyzfscmds.system.agnostic
 import pyzfscmds.utility
 import re
 import subprocess
+import functools
+from distutils.version import StrictVersion
 
 import zedenv.lib.be
 import zedenv.lib.check
@@ -420,9 +422,6 @@ class GrubLinuxEntry:
         initrd_real = next(
             (i for i in initrd_list if os.path.isfile(os.path.join(self.dirname, i))), None)
 
-        # if initrd_real:
-        #     return initrd_real[0]
-
         return initrd_real
 
     def get_boot_environment(self):
@@ -616,8 +615,7 @@ class Generator:
 
         boot_files = os.listdir(boot_dir)
         kernel_matches = [i for i in boot_files
-                          if search_regex.match(i) and self.file_valid(os.path.join(boot_dir, i))
-                          ]
+                          if search_regex.match(i) and self.file_valid(os.path.join(boot_dir, i))]
 
         return {
             "directory": boot_dir,
@@ -673,7 +671,11 @@ class Generator:
         entries = []
 
         for i in self.boot_list:
-            for j in i['kernels']:
+            entry_position = 0
+            kernels_sorted = sorted(i['kernels'], reverse=True,
+                                    key=functools.cmp_to_key(Generator.kernel_comparator))
+            
+            for j in kernels_sorted:
                 grub_entry = GrubLinuxEntry(
                     os.path.join(i['directory'], j), self.grub_os, self.be_root, self.rpool,
                     self.genkernel_arch, i, self.grub_cmdline_linux,
@@ -682,7 +684,9 @@ class Generator:
 
                 ds = os.path.join(self.be_root, grub_entry.boot_environment)
                 if ds == self.active_boot_environment:
-                    self.linux_entries.insert(0, grub_entry)
+                    # To keep ordering, put matching entries ordered based on position
+                    self.linux_entries.insert(entry_position, grub_entry)
+                    entry_position += 1
                 else:
                     self.linux_entries.append(grub_entry)
 
@@ -726,6 +730,60 @@ class Generator:
             entries.append("}")
 
         return entries
+
+    @staticmethod
+    def kernel_comparator(kernel0: str, kernel1: str) -> int:
+        """
+        Rather than using key based compare, it is simpler to use a comparator in this situation.
+        """
+
+        regex = re.compile(r'-([0-9]+(\.[0-9]+)*)-')
+
+        version0 = regex.search(kernel0)
+        version1 = regex.search(kernel1)
+
+        def ext_cmp(k0: str, k1: str) -> int:
+            """
+            Check if the kernels and in an extension,
+            if one of them does consider it less than the other
+            """
+            exts = ('bak', '.old')
+            if k0.endswith(exts) or k1.endswith(exts):
+                if k0.endswith(exts) and k1.endswith(exts):
+                    return 0
+
+                if k0.endswith(exts):
+                    return -1
+                return 1
+
+            return 0
+
+        # Compare versions
+        if version0 or version1:
+            if version0 and version1:
+                sv0 = -1
+                sv1 = -1
+                try:
+                    sv0 = StrictVersion(version0.group(1))
+                except ValueError:
+                    pass
+                try:
+                    sv1 = StrictVersion(version1.group(1))
+                except ValueError:
+                    pass
+
+                if sv0 < sv1:
+                    return -1
+                if sv0 == sv1:
+                    return ext_cmp(kernel0, kernel1)
+                return 1
+
+            if version0:
+                return 1
+            return -1
+
+        # No version
+        return ext_cmp(kernel0, kernel1)
 
 
 if __name__ == "__main__":
