@@ -121,7 +121,7 @@ Create a backup.
 
 .. code-block:: shell
 
-    cp /boot /boot.bak
+    cp -a /boot /boot.bak
 
 Unmount ``/boot``, and remount it at ``/mnt/boot``.
 
