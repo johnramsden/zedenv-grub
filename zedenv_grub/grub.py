@@ -32,6 +32,11 @@ class GRUB(plugin_config.Plugin):
             "default": "yes"
         },
         {
+            "property": "grubsubdir",
+            "description": "Set name of subdirectory under boot.",
+            "default": "grub"
+        },
+        {
             "property": "simpleentries",
             "description": "Add simple entries in GRUB.",
             "default": "yes"
@@ -51,8 +56,13 @@ class GRUB(plugin_config.Plugin):
         self.env_dir = "env"
         self.zfs_env_dir = "zfsenv"
 
-        self.skip_update_grub = skip_update
+        if not os.path.isdir(self.boot_mountpoint):
+            ZELogger.log({
+                "level": "EXCEPTION",
+                "message": f"Boot mountpoint {self.boot_mountpoint} does not exist. Exiting.\n"
+            }, exit_on_error=True)
 
+        self.skip_update_grub = skip_update
         self.skip_cleanup = skip_cleanup
 
         # Set defaults
@@ -111,7 +121,14 @@ class GRUB(plugin_config.Plugin):
             if not os.path.isdir(self.zedenv_properties["boot"]):
                 self.plugin_property_error("boot")
 
-        self.grub_boot_dir = os.path.join(self.boot_mountpoint, "grub")
+        self.grub_boot_dir = os.path.join(
+            self.boot_mountpoint, self.zedenv_properties["grubsubdir"])
+
+        if not os.path.isdir(self.grub_boot_dir):
+            ZELogger.log({"level": "EXCEPTION",
+                          "message": (f"Directory {self.grub_boot_dir} does not exist. "
+                                      "Check 'grubsubdir' property is set correctly")
+                          }, exit_on_error=True)
 
         self.grub_cfg = "grub.cfg"
 
