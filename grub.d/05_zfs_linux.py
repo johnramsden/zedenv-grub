@@ -9,7 +9,7 @@ import pyzfscmds.utility
 import re
 import subprocess
 import functools
-from distutils.version import StrictVersion
+from distutils.version import LooseVersion
 
 import zedenv.lib.be
 import zedenv.lib.check
@@ -764,19 +764,22 @@ class Generator:
                 sv0 = -1
                 sv1 = -1
                 try:
-                    sv0 = StrictVersion(version0.group(1))
+                    sv0 = LooseVersion(version0.group(1))
                 except ValueError:
                     pass
                 try:
-                    sv1 = StrictVersion(version1.group(1))
+                    sv1 = LooseVersion(version1.group(1))
                 except ValueError:
                     pass
 
-                if sv0 < sv1:
-                    return -1
-                if sv0 == sv1:
+                try:
+                    if sv0 < sv1:
+                        return -1
+                    if sv0 == sv1:
+                        return ext_cmp(kernel0, kernel1)
+                    return 1
+                except AttributeError:
                     return ext_cmp(kernel0, kernel1)
-                return 1
 
             if version0:
                 return 1
