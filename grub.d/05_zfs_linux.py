@@ -100,11 +100,11 @@ class GrubLinuxEntry:
         except RuntimeError as e:
             sys.exit(e)
         self.version = self.get_linux_version()
-
+        
         self.rpool = rpool
         self.be_root = be_root
         self.boot_environment = self.get_boot_environment()
-
+        
         # Root dataset will double as device ID
         self.linux_root_dataset = os.path.join(
             self.be_root, self.boot_environment)
@@ -172,7 +172,7 @@ class GrubLinuxEntry:
           abstraction="`"${grub_probe}" --device $@ --target=abstraction`"
         """
 
-        if self.grub_boot_on_zfs:
+        if self.grub_boot_on_zfs and not zedenv.lib.be.extra_bpool():
             devices = self.grub_devices
         else:
             devices = self.grub_device_boot
@@ -342,7 +342,7 @@ class GrubLinuxEntry:
             entry.append(self.entry_line(module, submenu_indent=entry_indentation + 1))
 
         entry.append(self.entry_line(f"echo 'Loading Linux {self.version} ...'",
-                                     submenu_indent=entry_indentation + 1))
+                                    submenu_indent=entry_indentation + 1))
         rel_linux = os.path.join(self.rel_dirname, self.basename)
         entry.append(
             self.entry_line(f"linux {rel_linux} root={self.linux_root_device} rw {grub_args}",
@@ -352,9 +352,9 @@ class GrubLinuxEntry:
 
         if initrd:
             entry.append(self.entry_line(f"echo 'Loading initial ramdisk ...'",
-                                         submenu_indent=entry_indentation + 1))
+                                        submenu_indent=entry_indentation + 1))
             entry.append(self.entry_line(f"initrd {' '.join(initrd)}",
-                                         submenu_indent=entry_indentation + 1))
+                                        submenu_indent=entry_indentation + 1))
 
         entry.append(self.entry_line("}", entry_indentation))
 
@@ -429,12 +429,15 @@ class GrubLinuxEntry:
         Get name of BE from kernel directory
         """
         if self.grub_boot_on_zfs:
-            if self.dirname == "/boot":
-                target = re.search(
-                    r'.*/(.*)@/boot$', grub_command("grub-mkrelpath", [self.dirname])[0])
-                return target.group(1) if target else None
+            if not zedenv.lib.be.extra_bpool():
+                if self.dirname == "/boot":
+                    target = re.search(
+                        r'.*/(.*)@/boot$', grub_command("grub-mkrelpath", [self.dirname])[0])
+                    return target.group(1) if target else None
 
-            target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
+                target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
+            else:
+                target = re.search(r'zedenv-(\w*)@?/*$', grub_command("grub-mkrelpath", [self.dirname])[0])
         else:
             target = re.search(r'zedenv-(.*)/*$', self.dirname)
 
@@ -546,7 +549,7 @@ class Generator:
 
         grub_boot_on_zfs = zedenv.lib.be.get_property(
             self.root_dataset, 'org.zedenv.grub:bootonzfs')
-        if grub_boot_on_zfs.lower() == ("1" or "yes"):
+        if grub_boot_on_zfs.lower() == "1" or "yes":
             self.grub_boot_on_zfs = True
         else:
             try:
@@ -608,7 +611,7 @@ class Generator:
 
     def create_entry(self, kernel_dir: str, search_regex) -> Optional[dict]:
         be_boot_dir = kernel_dir
-        if self.grub_boot_on_zfs and not kernel_dir == "/boot":
+        if self.grub_boot_on_zfs and not kernel_dir == "/boot" and not zedenv.lib.be.extra_bpool():
             be_boot_dir = os.path.join(kernel_dir, "boot")
 
         boot_dir = os.path.join(self.boot_env_kernels, be_boot_dir)
@@ -643,7 +646,8 @@ class Generator:
         boot_entries = [self.create_entry(e, boot_regex)
                         for e in os.listdir(self.boot_env_kernels)]
 
-        if self.grub_boot_on_zfs and os.path.exists("/boot"):
+        # Do not use `/boot` if an extra ZFS boot pool is used.
+        if self.grub_boot_on_zfs and os.path.exists("/boot") and not zedenv.lib.be.extra_bpool():
             boot_entries.append(self.create_entry("/boot", boot_regex))
 
         return boot_entries
