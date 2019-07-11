@@ -43,7 +43,7 @@ class GRUB(plugin_config.Plugin):
         }
     )
 
-    def __init__(self, zedenv_data: dict, skip_update: bool=False, skip_cleanup: bool=False):
+    def __init__(self, zedenv_data: dict, skip_update: bool = False, skip_cleanup: bool = False):
 
         super().__init__(zedenv_data)
 
@@ -210,7 +210,7 @@ class GRUB(plugin_config.Plugin):
         for b in be_list:
             if not pyzfscmds.utility.is_snapshot(b['name']):
                 be_name = pyzfscmds.utility.dataset_child_name(b['name'], False)
-                
+
                 if not zedenv.lib.be.extra_bpool():
                     # Check if 'b' is current dataset
                     if pyzfscmds.system.agnostic.dataset_mountpoint(b['name']) == "/":
@@ -228,8 +228,8 @@ class GRUB(plugin_config.Plugin):
 
                         if not os.listdir(be_boot_mount):
                             zedenv.cli.mount.zedenv_mount(be_name,
-                                                        be_boot_mount,
-                                                        self.verbose, self.be_root)
+                                                          be_boot_mount,
+                                                          self.verbose, self.be_root)
                         else:
                             ZELogger.verbose_log({
                                 "level": "WARNING",
@@ -241,21 +241,20 @@ class GRUB(plugin_config.Plugin):
 
                     be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
                     ZELogger.verbose_log(
-                            {"level": "INFO", "message": f"Setting up {b['name']}.\n"}, self.verbose)
+                        {"level": "INFO", "message": f"Setting up {b['name']}.\n"}, self.verbose)
 
                     if not os.path.exists(be_boot_mount):
-                            os.mkdir(be_boot_mount)
+                        os.mkdir(be_boot_mount)
 
                     if not os.listdir(be_boot_mount):
                         zedenv.cli.mount.zedenv_mount("zedenv-" + be_name,
-                                                    be_boot_mount,
-                                                    self.verbose, self.be_boot, check_bpool=False)
+                                                      be_boot_mount,
+                                                      self.verbose, self.be_boot, check_bpool=False)
                     else:
                         ZELogger.verbose_log({
                             "level": "WARNING",
                             "message": f"Mount directory {be_boot_mount} wasn't empty, skipping.\n"
                         }, self.verbose)
-
 
     def teardown_boot_env_tree(self):
         def ismount(path, boot):

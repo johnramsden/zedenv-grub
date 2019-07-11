@@ -100,11 +100,11 @@ class GrubLinuxEntry:
         except RuntimeError as e:
             sys.exit(e)
         self.version = self.get_linux_version()
-        
+
         self.rpool = rpool
         self.be_root = be_root
         self.boot_environment = self.get_boot_environment()
-        
+
         # Root dataset will double as device ID
         self.linux_root_dataset = os.path.join(
             self.be_root, self.boot_environment)
@@ -342,7 +342,7 @@ class GrubLinuxEntry:
             entry.append(self.entry_line(module, submenu_indent=entry_indentation + 1))
 
         entry.append(self.entry_line(f"echo 'Loading Linux {self.version} ...'",
-                                    submenu_indent=entry_indentation + 1))
+                                     submenu_indent=entry_indentation + 1))
         rel_linux = os.path.join(self.rel_dirname, self.basename)
         entry.append(
             self.entry_line(f"linux {rel_linux} root={self.linux_root_device} rw {grub_args}",
@@ -352,9 +352,9 @@ class GrubLinuxEntry:
 
         if initrd:
             entry.append(self.entry_line(f"echo 'Loading initial ramdisk ...'",
-                                        submenu_indent=entry_indentation + 1))
+                                         submenu_indent=entry_indentation + 1))
             entry.append(self.entry_line(f"initrd {' '.join(initrd)}",
-                                        submenu_indent=entry_indentation + 1))
+                                         submenu_indent=entry_indentation + 1))
 
         entry.append(self.entry_line("}", entry_indentation))
 
@@ -437,7 +437,8 @@ class GrubLinuxEntry:
 
                 target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
             else:
-                target = re.search(r'zedenv-(\w*)@?/*$', grub_command("grub-mkrelpath", [self.dirname])[0])
+                target = re.search(r'zedenv-(\w*)@?/*$',
+                                   grub_command("grub-mkrelpath", [self.dirname])[0])
         else:
             target = re.search(r'zedenv-(.*)/*$', self.dirname)
 
@@ -678,7 +679,7 @@ class Generator:
             entry_position = 0
             kernels_sorted = sorted(i['kernels'], reverse=True,
                                     key=functools.cmp_to_key(Generator.kernel_comparator))
-            
+
             for j in kernels_sorted:
                 grub_entry = GrubLinuxEntry(
                     os.path.join(i['directory'], j), self.grub_os, self.be_root, self.rpool,
@@ -824,14 +825,14 @@ if __name__ == "__main__":
                 sys.exit(0)
 
             bootloader_plugin = zedenv_grub.grub.GRUB({
-                        'boot_environment': current_be,
-                        'old_boot_environment': current_be,
-                        'bootloader': "grub",
-                        'verbose': False,
-                        'noconfirm': False,
-                        'noop': False,
-                        'boot_environment_root': boot_environment_root
-                    }, skip_update=True, skip_cleanup=True)
+                'boot_environment': current_be,
+                'old_boot_environment': current_be,
+                'bootloader': "grub",
+                'verbose': False,
+                'noconfirm': False,
+                'noop': False,
+                'boot_environment_root': boot_environment_root
+            }, skip_update=True, skip_cleanup=True)
 
             if not bootloader_plugin.bootloader == "grub":
                 sys.exit(0)
