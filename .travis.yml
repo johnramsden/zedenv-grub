@@ -1,9 +1,10 @@
 sudo: required
-dist: trusty
+dist: xenial
 
 language: python
 python:
   - "3.6"
+  - "3.7"
 
 env:
   global:
@@ -14,7 +15,7 @@ cache:
   custom_install: true
 
 before_install:
-  - sudo scripts/travis/ubuntu-14_04/setup_zfs_requirements.sh
+  - sudo scripts/travis/ubuntu/setup_zfs_requirements.sh
   - sudo scripts/travis/common/create_test_root.sh
 
 branches:
@@ -26,15 +27,7 @@ install:
   - pip install '.[test]'
 
 script:
-  - |
-    sudo env "PATH=$PATH" \
-         pytest --cov=zedenv tests \
-                           --unsafe \
-                           --zpool="${TEST_POOL}" \
-                           --root-dataset="${TEST_POOL}/ROOT/default" \
-                           --zfs-version="$(modinfo zfs | grep -iw version | awk '{print $2}')"
-
-after_script:
   - modinfo zfs | grep -iw version
   - modinfo spl | grep -iw version
   - sudo env "PATH=$PATH" pytest --pep8
+
