@@ -23,8 +23,10 @@ branches:
     - /.*/ # Build all branches
 
 install:
-  - python setup.py install
-  - pip install '.[test]'
+  - git clone https://github.com/johnramsden/zedenv.git
+  - (cd zedenv && python setup.py install)
+  - sudo env "PATH=$PATH" python setup.py install
+  - sudo env "PATH=$PATH" pip install '.[test]'
 
 script:
   - modinfo zfs | grep -iw version
