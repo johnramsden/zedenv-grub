@@ -71,9 +71,9 @@ class GRUB(plugin_config.Plugin):
 
         self.check_zedenv_properties()
 
-        if self.zedenv_properties["bootonzfs"] == ("yes" or "1"):
+        if self.zedenv_properties["bootonzfs"] in ("yes", "1"):
             self.bootonzfs = True
-        elif self.zedenv_properties["bootonzfs"] == ("no" or "0"):
+        elif self.zedenv_properties["bootonzfs"] in ("no", "0"):
             self.bootonzfs = False
         else:
             ZELogger.log({

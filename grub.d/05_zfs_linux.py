@@ -489,7 +489,7 @@ class Generator:
         # Default to true in order to maintain compatibility with older kernels.
         self.grub_disable_linux_partuuid = True
         if "GRUB_DISABLE_LINUX_PARTUUID" in os.environ:
-            if os.environ['GRUB_DISABLE_LINUX_PARTUUID'] == ("false" or "False" or "0"):
+            if os.environ['GRUB_DISABLE_LINUX_PARTUUID'] in ("false", "False", "0"):
                 self.grub_disable_linux_partuuid = False
 
         if "GRUB_CMDLINE_LINUX" in os.environ:
@@ -546,7 +546,7 @@ class Generator:
 
         grub_boot_on_zfs = zedenv.lib.be.get_property(
             self.root_dataset, 'org.zedenv.grub:bootonzfs')
-        if grub_boot_on_zfs.lower() == ("1" or "yes"):
+        if grub_boot_on_zfs.lower() in ("1", "yes"):
             self.grub_boot_on_zfs = True
         else:
             try:
