@@ -233,7 +233,7 @@ class GrubLinuxEntry:
             if fs_hint and fs_hint[0].strip() != '':
                 hint = ''.join(fs_hint).strip()
                 lines.append(f"set root='{hint}'")
-        """
+        r"""
           if fs_uuid="`"${grub_probe}" --device $@ --target=fs_uuid 2> /dev/null`" ; then
             hints="`"${grub_probe}" --device $@ --target=hints_string 2> /dev/null`" || hints=
             echo "if [ x\$feature_platform_search_hint = xy ]; then"
@@ -289,7 +289,7 @@ class GrubLinuxEntry:
                 title = title_prefix
 
             # TODO: If matches default...
-            """
+            r"""
             if [ x"$title" = x"$GRUB_ACTUAL_DEFAULT" ] || \
                         [ x"Previous Linux versions>$title" = x"$GRUB_ACTUAL_DEFAULT" ]; then
 
