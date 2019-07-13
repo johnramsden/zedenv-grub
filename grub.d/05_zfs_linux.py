@@ -674,7 +674,7 @@ class Generator:
             entry_position = 0
             kernels_sorted = sorted(i['kernels'], reverse=True,
                                     key=functools.cmp_to_key(Generator.kernel_comparator))
-            
+
             for j in kernels_sorted:
                 grub_entry = GrubLinuxEntry(
                     os.path.join(i['directory'], j), self.grub_os, self.be_root, self.rpool,

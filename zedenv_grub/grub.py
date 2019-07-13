@@ -43,7 +43,7 @@ class GRUB(plugin_config.Plugin):
         }
     )
 
-    def __init__(self, zedenv_data: dict, skip_update: bool=False, skip_cleanup: bool=False):
+    def __init__(self, zedenv_data: dict, skip_update: bool = False, skip_cleanup: bool = False):
 
         super().__init__(zedenv_data)
 
@@ -202,7 +202,6 @@ class GRUB(plugin_config.Plugin):
         if not os.path.exists(mount_root):
             os.mkdir(mount_root)
 
-        be_list = None
         be_list = zedenv.lib.be.list_boot_environments(self.be_root, ['name'])
         ZELogger.verbose_log(
             {"level": "INFO", "message": f"Going over list {be_list}.\n"}, self.verbose)
