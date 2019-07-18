@@ -237,7 +237,7 @@ class GRUB(plugin_config.Plugin):
                             }, self.verbose)
                 else:
                     # Mount all boot datasets
-                    self.be_boot = zedenv.lib.be.root("/boot")
+                    be_boot = zedenv.lib.be.root("/boot")
 
                     be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
                     ZELogger.verbose_log(
@@ -249,7 +249,7 @@ class GRUB(plugin_config.Plugin):
                     if not os.listdir(be_boot_mount):
                         zedenv.cli.mount.zedenv_mount("zedenv-" + be_name,
                                                       be_boot_mount,
-                                                      self.verbose, self.be_boot, check_bpool=False)
+                                                      self.verbose, be_boot, check_bpool=False)
                     else:
                         ZELogger.verbose_log({
                             "level": "WARNING",
