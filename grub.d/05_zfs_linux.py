@@ -550,7 +550,7 @@ class Generator:
 
         grub_boot_on_zfs = zedenv.lib.be.get_property(
             self.root_dataset, 'org.zedenv.grub:bootonzfs')
-        if grub_boot_on_zfs.lower() == "1" or "yes":
+        if grub_boot_on_zfs.lower() in ("1", "yes"):
             self.grub_boot_on_zfs = True
         else:
             try:
