@@ -221,7 +221,8 @@ class GRUB(plugin_config.Plugin):
                     else:
                         be_boot_mount = os.path.join(mount_root, f"zedenv-{be_name}")
                         ZELogger.verbose_log(
-                            {"level": "INFO", "message": f"Setting up {b['name']}.\n"}, self.verbose)
+                            {"level": "INFO", "message": f"Setting up {b['name']}.\n"}, 
+                                self.verbose)
 
                         if not os.path.exists(be_boot_mount):
                             os.mkdir(be_boot_mount)
@@ -233,7 +234,8 @@ class GRUB(plugin_config.Plugin):
                         else:
                             ZELogger.verbose_log({
                                 "level": "WARNING",
-                                "message": f"Mount directory {be_boot_mount} wasn't empty, skipping.\n"
+                                "message": 
+                                    f"Mount directory {be_boot_mount} wasn't empty, skipping.\n"
                             }, self.verbose)
                 else:
                     # Mount all boot datasets
@@ -259,8 +261,9 @@ class GRUB(plugin_config.Plugin):
     def teardown_boot_env_tree(self):
         def ismount(path, boot):
             if not os.path.ismount(path):
-                # This is required because `os.path.ismount()` returns False if a ZFS dataset is beeing mounted
-                # again to a subfolder of itself. E.g. bpool/boot/env/zedenv-default is mounted to
+                # This is required because `os.path.ismount()` returns False if a ZFS dataset is 
+                # beeing mounted again to a subfolder of itself. E.g. bpool/boot/env/zedenv-default 
+                # is mounted to
                 #  - `/boot` and
                 #  - `/boot/zfsenv/zedenv-default`
                 s1 = os.lstat(path)
