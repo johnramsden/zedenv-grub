@@ -172,7 +172,7 @@ class GrubLinuxEntry:
           abstraction="`"${grub_probe}" --device $@ --target=abstraction`"
         """
 
-        if self.grub_boot_on_zfs:
+        if self.grub_boot_on_zfs and not zedenv.lib.be.extra_bpool():
             devices = self.grub_devices
         else:
             devices = self.grub_device_boot
@@ -429,12 +429,16 @@ class GrubLinuxEntry:
         Get name of BE from kernel directory
         """
         if self.grub_boot_on_zfs:
-            if self.dirname == "/boot":
-                target = re.search(
-                    r'.*/(.*)@/boot$', grub_command("grub-mkrelpath", [self.dirname])[0])
-                return target.group(1) if target else None
+            if not zedenv.lib.be.extra_bpool():
+                if self.dirname == "/boot":
+                    target = re.search(
+                        r'.*/(.*)@/boot$', grub_command("grub-mkrelpath", [self.dirname])[0])
+                    return target.group(1) if target else None
 
-            target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
+                target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
+            else:
+                target = re.search(r'zedenv-(\w*)@?/*$',
+                                   grub_command("grub-mkrelpath", [self.dirname])[0])
         else:
             target = re.search(r'zedenv-(.*)/*$', self.dirname)
 
@@ -608,7 +612,7 @@ class Generator:
 
     def create_entry(self, kernel_dir: str, search_regex) -> Optional[dict]:
         be_boot_dir = kernel_dir
-        if self.grub_boot_on_zfs and not kernel_dir == "/boot":
+        if self.grub_boot_on_zfs and not kernel_dir == "/boot" and not zedenv.lib.be.extra_bpool():
             be_boot_dir = os.path.join(kernel_dir, "boot")
 
         boot_dir = os.path.join(self.boot_env_kernels, be_boot_dir)
@@ -643,7 +647,8 @@ class Generator:
         boot_entries = [self.create_entry(e, boot_regex)
                         for e in os.listdir(self.boot_env_kernels)]
 
-        if self.grub_boot_on_zfs and os.path.exists("/boot"):
+        # Do not use `/boot` if an extra ZFS boot pool is used.
+        if self.grub_boot_on_zfs and os.path.exists("/boot") and not zedenv.lib.be.extra_bpool():
             boot_entries.append(self.create_entry("/boot", boot_regex))
 
         return boot_entries
@@ -820,14 +825,14 @@ if __name__ == "__main__":
                 sys.exit(0)
 
             bootloader_plugin = zedenv_grub.grub.GRUB({
-                        'boot_environment': current_be,
-                        'old_boot_environment': current_be,
-                        'bootloader': "grub",
-                        'verbose': False,
-                        'noconfirm': False,
-                        'noop': False,
-                        'boot_environment_root': boot_environment_root
-                    }, skip_update=True, skip_cleanup=True)
+                'boot_environment': current_be,
+                'old_boot_environment': current_be,
+                'bootloader': "grub",
+                'verbose': False,
+                'noconfirm': False,
+                'noop': False,
+                'boot_environment_root': boot_environment_root
+            }, skip_update=True, skip_cleanup=True)
 
             if not bootloader_plugin.bootloader == "grub":
                 sys.exit(0)
