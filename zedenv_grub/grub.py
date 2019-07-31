@@ -71,9 +71,9 @@ class GRUB(plugin_config.Plugin):
 
         self.check_zedenv_properties()
 
-        if self.zedenv_properties["bootonzfs"] == ("yes" or "1"):
+        if self.zedenv_properties["bootonzfs"] in ("yes", "1"):
             self.bootonzfs = True
-        elif self.zedenv_properties["bootonzfs"] == ("no" or "0"):
+        elif self.zedenv_properties["bootonzfs"] in ("no", "0"):
             self.bootonzfs = False
         else:
             ZELogger.log({
@@ -202,7 +202,6 @@ class GRUB(plugin_config.Plugin):
         if not os.path.exists(mount_root):
             os.mkdir(mount_root)
 
-        be_list = None
         be_list = zedenv.lib.be.list_boot_environments(self.be_root, ['name'])
         ZELogger.verbose_log(
             {"level": "INFO", "message": f"Going over list {be_list}.\n"}, self.verbose)

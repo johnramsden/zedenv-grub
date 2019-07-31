@@ -7,7 +7,7 @@ tests_require = [
     'pytest',
     'pytest-runner',
     'pytest-cov',
-    'pytest-pep8',
+    'pytest-pycodestyle',
     'tox'
 ]
 
@@ -25,7 +25,7 @@ setup(
     name='zedenv-grub',
     version=__version__,
     description='zedenv Plugin for GRUB',
-    url='http://github.com/johnramsden/zedenv',
+    url='http://github.com/johnramsden/zedenv-zedenv',
     author='John Ramsden',
     author_email='johnramsden@riseup.net',
     license='BSD-3-Clause',

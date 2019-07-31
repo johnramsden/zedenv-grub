@@ -233,7 +233,7 @@ class GrubLinuxEntry:
             if fs_hint and fs_hint[0].strip() != '':
                 hint = ''.join(fs_hint).strip()
                 lines.append(f"set root='{hint}'")
-        """
+        r"""
           if fs_uuid="`"${grub_probe}" --device $@ --target=fs_uuid 2> /dev/null`" ; then
             hints="`"${grub_probe}" --device $@ --target=hints_string 2> /dev/null`" || hints=
             echo "if [ x\$feature_platform_search_hint = xy ]; then"
@@ -289,7 +289,7 @@ class GrubLinuxEntry:
                 title = title_prefix
 
             # TODO: If matches default...
-            """
+            r"""
             if [ x"$title" = x"$GRUB_ACTUAL_DEFAULT" ] || \
                         [ x"Previous Linux versions>$title" = x"$GRUB_ACTUAL_DEFAULT" ]; then
 
@@ -493,7 +493,7 @@ class Generator:
         # Default to true in order to maintain compatibility with older kernels.
         self.grub_disable_linux_partuuid = True
         if "GRUB_DISABLE_LINUX_PARTUUID" in os.environ:
-            if os.environ['GRUB_DISABLE_LINUX_PARTUUID'] == ("false" or "False" or "0"):
+            if os.environ['GRUB_DISABLE_LINUX_PARTUUID'] in ("false", "False", "0"):
                 self.grub_disable_linux_partuuid = False
 
         if "GRUB_CMDLINE_LINUX" in os.environ:
