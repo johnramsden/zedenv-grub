@@ -437,7 +437,7 @@ class GrubLinuxEntry:
 
                 target = re.search(r'zedenv-(.*)/boot/*$', self.dirname)
             else:
-                target = re.search(r'zedenv-(.*)@?/*$',
+                target = re.search(r'zedenv-([a-zA-Z0-9_-]+)@?/*$',
                                    grub_command("grub-mkrelpath", [self.dirname])[0])
         else:
             target = re.search(r'zedenv-(.*)/*$', self.dirname)
