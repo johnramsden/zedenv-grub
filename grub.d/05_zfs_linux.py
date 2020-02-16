@@ -742,7 +742,7 @@ class Generator:
         Rather than using key based compare, it is simpler to use a comparator in this situation.
         """
 
-        regex = re.compile(r'-([0-9]+(\.[0-9]+)*)-')
+        regex = re.compile(r'-([0-9]+([\.|\-][0-9]+)*)-')
 
         version0 = regex.search(kernel0)
         version1 = regex.search(kernel1)
